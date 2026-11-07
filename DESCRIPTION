@@ -1,0 +1,29 @@
+Package: MoFIA
+Type: Package
+Title: Moderated Factor and Item Analysis
+Version: 0.1.0
+Authors@R: person("Henrik", "Godmann", email = "hrgodmann@gmail.com", role = c("aut", "cre"))
+Description: Fits moderated nonlinear factor analysis models (Bauer and Hussong,
+    2009, <doi:10.1037/a0015583>; Bauer, 2017, <doi:10.1037/met0000077>) by
+    marginal maximum likelihood. Item loadings, thresholds or intercepts and
+    residual variances, as well as factor means, variances and correlations,
+    can depend on any number of moderators. Items can be binary, ordinal (logit
+    or probit link), continuous, or mixed. The factors are integrated out by
+    adaptive Gauss-Hermite quadrature with analytic gradients in C++. Provides
+    maximum likelihood, robust (sandwich) and score-based standard errors,
+    scaled likelihood-ratio tests (Satorra and Bentler, 2001,
+    <doi:10.1007/BF02296192>) and Wald tests for measurement invariance and
+    differential item functioning.
+License: GPL (>= 3)
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports: Rcpp, statmod, stats, utils, graphics, grDevices
+LinkingTo: Rcpp
+Suggests: testthat (>= 3.0.0), numDeriv, knitr, rmarkdown, generics
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+LazyData: true
+URL: https://github.com/hrgodmann/MoFIA
+BugReports: https://github.com/hrgodmann/MoFIA/issues
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1

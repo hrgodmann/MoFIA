@@ -1,0 +1,10 @@
+bibentry(
+  bibtype = "Manual",
+  title = "{MoFIA}: Moderated Factor and Item Analysis",
+  author = person("Henrik", "Godmann"),
+  year = format(Sys.Date(), "%Y"),
+  note = paste("R package version", meta$Version),
+  url = "https://github.com/hrgodmann/MoFIA",
+  textVersion = paste0("Godmann, H. (", format(Sys.Date(), "%Y"), "). MoFIA: Moderated Factor and Item Analysis. ",
+                       "R package version ", meta$Version, ". https://github.com/hrgodmann/MoFIA")
+)

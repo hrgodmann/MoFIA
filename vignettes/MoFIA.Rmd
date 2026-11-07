@@ -1,0 +1,222 @@
+---
+title: "Getting started with MoFIA"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with MoFIA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+MoFIA fits moderated nonlinear factor analysis (MNLFA) models: factor models in
+which item parameters (loadings, thresholds or intercepts, residual variances)
+and factor parameters (means, variances, correlations) depend on moderators such
+as age or gender. Moderators can be continuous or categorical, and there can be
+any number of them. This makes it possible to test measurement invariance and
+differential item functioning (DIF) without forming groups.
+
+## Data
+
+The `parabelief` data contain 14 paranormal-belief items, rated from 1
+(*definitely not*) to 5 (*definitely*), for 600 Dutch respondents, together
+with standardized age and gender (Hoogeveen et al., 2024). Here we analyse the
+six items on belief in *unearthly beings*. Their answers are strongly skewed,
+so we treat them as ordinal.
+
+```{r}
+library(MoFIA)
+data(parabelief)
+ub <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession",
+        "Sorcery", "HauntedPlaces")
+sapply(parabelief[ub], function(x) round(prop.table(table(x)), 2))
+```
+
+## Specifying models
+
+A model is specified with `mofia_model()` and fitted with `mofia()`. By
+default, the factor mean and variance are moderated by all moderators, and the
+item parameters are not moderated. Moderation of item parameters is added with
+`loading_mod` and `threshold_mod`, for example as a vector of item names (these
+items, moderated by all moderators).
+
+To compare factor means across the moderators, at least one item must keep
+invariant parameters; here `SpiritsGhosts` serves as the anchor. We fit three
+nested models:
+
+* **scalar**: no item parameter is moderated;
+* **metric**: the thresholds of all items except the anchor are moderated;
+* **configural**: in addition, the loadings of all items except the anchor are moderated.
+
+```{r}
+others <- setdiff(ub, "SpiritsGhosts")
+m_scalar <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"))
+m_metric <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
+                        threshold_mod = others)
+m_config <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
+                        threshold_mod = others, loading_mod = others)
+m_metric
+```
+
+## Fitting
+
+```{r}
+scalar <- mofia(m_scalar)
+metric <- mofia(m_metric)
+config <- mofia(m_config)
+metric
+```
+
+`mofia()` uses the logistic link for categorical items by default
+(`link = "probit"` is also available). The factors are integrated out by
+adaptive Gauss-Hermite quadrature, and convergence is checked with the Newton
+decrement, the log-likelihood gain still available from one more Newton step.
+
+## Comparing models
+
+`anova()` compares nested models with likelihood-ratio tests, by default with
+the Satorra-Bentler scaling correction for robust (MLR) estimation:
+
+```{r}
+anova(scalar, metric, config)
+```
+
+Moderating the thresholds improves the fit clearly, so at least some items show
+threshold DIF. Moderating the loadings does not improve it further, so the
+loadings can be treated as invariant.
+
+A Wald test checks DIF for a single item. The tested parameters can be named
+directly or selected with a regular expression:
+
+```{r}
+mofia_wald(metric, "^beta\\[DevilPossession,", regex = TRUE)
+```
+
+## Screening all items at once: score tests
+
+Instead of fitting one model per item, `mofia_score_test()` tests every
+moderation effect that a fitted model does not contain, from that one fit
+(like modification indices). Here we screen the scalar model; `by = "item"`
+tests each item's threshold or loading moderation jointly over both moderators:
+
+```{r}
+screen <- mofia_score_test(scalar, by = "item")
+screen[, c("test", "df", "statistic", "p", "p_adj")]
+```
+
+The robust statistics flag threshold DIF for Aliens, DevilPossession and
+SpiritsGhosts (Holm-adjusted *p* < .05) and no loading DIF, in line with the
+model comparisons above. SpiritsGhosts, the anchor of the models above, is
+flagged too. Tests against a scalar model are relative to the other items, and
+choosing anchors is a known difficulty of DIF analysis; the item with the
+weakest evidence for DIF (here GnomesElves) is a better anchor candidate.
+
+## Parameter estimates
+
+`summary()` prints all estimates, grouped by parameter type. The table can also
+be used directly:
+
+```{r}
+est <- summary(metric)$coefficients
+est[est$type %in% c("beta", "gamma", "delta"), c("estimate", "se", "z", "p")]
+```
+
+`gamma` parameters are the moderation effects on the factor mean, and `delta`
+parameters on the log factor variance. Both are on the scale of the baseline
+factor (mean 0 and variance 1 for a person with all moderators at 0). `beta`
+parameters shift all thresholds of an item. Standard errors are robust (MLR) by
+default; `summary(fit, se = "ML")` and `vcov(fit, se = "ML")` give the
+model-based ones.
+
+## Plots, factor scores and predictions
+
+`plot()` shows how the factor mean and SD change with a moderator, how
+moderated loadings change, or item response functions at several moderator
+values (DIF shows as curves that differ):
+
+```{r, fig.width = 7, fig.height = 3.5}
+plot(metric, "factors", moderator = "Age")
+plot(metric, "items", moderator = "Male", items = c("DevilPossession", "Aliens"))
+```
+
+`mofia_scores()` gives EAP factor scores with posterior SDs, and `predict()`
+gives model-implied category probabilities or expected item scores for chosen
+moderator values:
+
+```{r}
+head(mofia_scores(metric), 3)
+predict(metric, newdata = data.frame(Age = c(-1, 1), Male = c(0, 1)))
+```
+
+## Continuous items
+
+Items can also be treated as continuous (normal), with log-linearly moderated
+residual variances:
+
+```{r}
+m_cont <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
+                      threshold_mod = others, continuous = ub)
+cont <- mofia(m_cont)
+cont$scaling
+```
+
+The robust scaling correction factor is well above 1, a sign that the
+normal model does not fit these skewed items well. The ordinal model's factor is
+close to 1 (`metric$scaling`). Ordinal and continuous items can also be mixed
+in one model.
+
+## Formulas and model syntax
+
+Moderators can also be given as a formula. Factor variables are dummy-coded,
+and interactions and transformations are allowed; `standardize = TRUE` turns
+continuous moderators into z-scores (new data for `predict()` and plots stay
+on the original scale). The loading pattern can be written in lavaan style:
+
+```{r}
+m_f <- mofia_model(parabelief, loadings = "UB =~ SpiritsGhosts + GnomesElves + Aliens +
+                                           DevilPossession + Sorcery + HauntedPlaces",
+                   moderators = ~ Age * Male, standardize = TRUE)
+m_f$moderators
+```
+
+## More than one factor
+
+For several factors, give the loading pattern as a named list or as model
+syntax. With two
+factors, the factor correlation can be moderated as well (`cor_mod`), on the
+Fisher-z scale. This model is not run here because it takes somewhat longer:
+
+```{r, eval = FALSE}
+eha <- c("HealingHands", "LifeCoursePossessions", "Graphology", "Dowsing",
+         "MindReading", "Willpower", "SeeingFuture", "SeeingEvents")
+m2 <- mofia_model(parabelief, loadings = list(EHA = eha, UB = ub),
+                  moderators = c("Age", "Male"),
+                  threshold_mod = TRUE, mean_mod = FALSE, cor_mod = TRUE)
+fit2 <- mofia(m2, threads = 4)
+```
+
+With three or more factors, moderated correlations are refused by default:
+pairwise moderated correlations need not form a valid correlation matrix for all
+moderator values, and this case is not yet methodologically established.
+
+## References
+
+Bauer, D. J. (2017). A more general model for testing measurement invariance
+and differential item functioning. *Psychological Methods, 22*(3), 507–526.
+https://doi.org/10.1037/met0000077
+
+Bauer, D. J., & Hussong, A. M. (2009). Psychometric approaches for developing
+commensurate measures across independent studies: Traditional and new models.
+*Psychological Methods, 14*(2), 101–125. https://doi.org/10.1037/a0015583
+
+Hoogeveen, S., Borsboom, D., Kucharský, Š., Marsman, M., Molenaar, D., de Ron,
+J., Sekulovski, N., Visser, I., van Elk, M., & Wagenmakers, E.-J. (2024).
+Prevalence, patterns and predictors of paranormal beliefs in The Netherlands: A
+several-analysts approach. *Royal Society Open Science, 11*(9), 240049.
+https://doi.org/10.1098/rsos.240049
+
+Satorra, A., & Bentler, P. M. (2001). A scaled difference chi-square test
+statistic for moment structure analysis. *Psychometrika, 66*, 507–514.
+https://doi.org/10.1007/BF02296192
