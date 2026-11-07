@@ -34,8 +34,10 @@
   list(T = T, logw = logw, D = D, nq = nq)
 }
 
-# default number of quadrature nodes per dimension
-.default_nq <- function(D) c(31, 15, 9, 7, 5, 4)[min(D, 6)]
+# default number of quadrature nodes per dimension (models with only continuous items
+# use exact adaptation, for which a few nodes suffice)
+.default_nq <- function(D, continuous = FALSE)
+  if (continuous) c(7, 7, 5, 5, 4, 3)[min(D, 6)] else c(31, 15, 9, 7, 5, 4)[min(D, 6)]
 
 .mofia_threads <- function() max(1L, as.integer(getOption("mofia.threads", 1L)))
 
@@ -196,24 +198,85 @@
   out
 }
 
-# ---- C++ engine ---------------------------------------------------------------
-.mofia_ll_cpp <- function(theta, spec, link = "logit", nodes = .mofia_nodes(31, spec$D),
-                              scores = FALSE, per_person = FALSE, adapt = NULL, return_post = FALSE) {
+# ---- person-level inputs of the engine ------------------------------------------
+# NU (N x P) item shifts incl. intercepts of continuous items; LAM (N x P*D) loadings;
+# RV (N x P) residual variances of continuous items; CL (N x D(D+1)/2) Cholesky factor
+# of the factor covariance matrix (row-wise lower triangle); NULL if invalid.
+.engine_inputs <- function(theta, spec) {
   pr <- .unpack(theta, spec); X <- spec$X; N <- spec$N; P <- spec$P; D <- spec$D; Tn <- D * (D + 1) / 2
-  for (j in seq_len(P)) if (is.unsorted(pr$tau[[j]], strictly = TRUE)) return(-Inf)
-  st <- .structural(pr, spec); if (!st$ok) return(-Inf)
+  for (j in seq_len(P)) if (is.unsorted(pr$tau[[j]], strictly = TRUE)) return(NULL)
+  st <- .structural(pr, spec); if (!st$ok) return(NULL)
   NU <- X %*% t(pr$B) + matrix(pr$nu0, N, P, byrow = TRUE)
   cont <- if (is.null(spec$cont)) rep(FALSE, P) else spec$cont
-  RV <- matrix(1, N, P); YC <- matrix(NaN, N, P)
-  for (j in which(cont)) { RV[, j] <- exp(pr$Om0[j] + drop(X %*% pr$Om[j, ])); YC[, j] <- ifelse(is.na(spec$Y[, j]), NaN, spec$Y[, j]) }
+  RV <- matrix(1, N, P)
+  for (j in which(cont)) RV[, j] <- exp(pr$Om0[j] + drop(X %*% pr$Om[j, ]))
   LAM <- matrix(0, N, P * D)
   for (d in seq_len(D)) for (j in seq_len(P)) if (spec$loadings[j, d])
     LAM[, j + P * (d - 1)] <- pr$L0[j, d] + drop(X %*% pr$L1[j, d, ])
-  Yi <- spec$Y; Yi[, cont] <- 0; storage.mode(Yi) <- "integer"
-  tau_off <- c(0L, cumsum(spec$K - 1L))
   Lr <- function(d, e) if (D == 1) rep(1, N) else st$Lr[[d]][[e]]
   CL <- matrix(0, N, Tn)                                 # Cholesky of Sigma_i = diag(s) R diag(s)
   for (d in seq_len(D)) for (e in seq_len(d)) CL[, .lt_index(d, e)] <- st$s[, d] * Lr(d, e)
+  list(pr = pr, st = st, NU = NU, LAM = LAM, RV = RV, CL = CL, cont = cont, Lr = Lr)
+}
+
+# Exact posterior of the standardized factors z (eta = mu + C z, z ~ N(0, I)) given the
+# continuous items only (normal-normal conjugacy): precision Q = I + A' Theta^-1 A with
+# A = Lambda C, mean m = Q^-1 A' Theta^-1 (y - nu - Lambda mu). Returns the adaptive
+# state (m, Lc) and, per person, the number of observed continuous items.
+.cont_posterior <- function(theta, spec, ei = .engine_inputs(theta, spec)) {
+  if (is.null(ei)) return(NULL)
+  N <- spec$N; P <- spec$P; D <- spec$D; cont <- which(ei$cont)
+  Cf <- function(d, e) if (e > d) 0 else ei$CL[, .lt_index(d, e)]
+  Q <- array(0, c(N, D, D)); b <- matrix(0, N, D); nobs <- integer(N)
+  for (d in seq_len(D)) Q[, d, d] <- 1
+  for (j in cont) {
+    y <- spec$Y[, j]; o <- !is.na(y); nobs <- nobs + o
+    lam <- sapply(seq_len(D), function(d) ei$LAM[, j + P * (d - 1)]); lam <- matrix(lam, N, D)
+    A <- sapply(seq_len(D), function(e) Reduce(`+`, lapply(e:D, function(d) lam[, d] * Cf(d, e)))); A <- matrix(A, N, D)
+    mu_lin <- rowSums(lam * ei$st$mu)
+    w <- ifelse(o, 1 / ei$RV[, j], 0); r <- ifelse(o, y - ei$NU[, j] - mu_lin, 0)
+    for (d in seq_len(D)) {
+      b[, d] <- b[, d] + w * A[, d] * r
+      for (e in seq_len(D)) Q[, d, e] <- Q[, d, e] + w * A[, d] * A[, e]
+    }
+  }
+  # batch inverse of Q via its Cholesky factor (D is small)
+  L <- array(0, c(N, D, D))
+  for (j in seq_len(D)) {
+    v <- Q[, j, j] - (if (j > 1) rowSums(L[, j, seq_len(j - 1), drop = FALSE]^2) else 0)
+    L[, j, j] <- sqrt(v)
+    if (j < D) for (i in (j + 1):D)
+      L[, i, j] <- (Q[, i, j] - (if (j > 1) rowSums(L[, i, seq_len(j - 1), drop = FALSE] * L[, j, seq_len(j - 1), drop = FALSE]) else 0)) / L[, j, j]
+  }
+  Li <- array(0, c(N, D, D))                              # L^-1 (lower triangular)
+  for (i in seq_len(D)) {
+    Li[, i, i] <- 1 / L[, i, i]
+    if (i > 1) for (j in seq_len(i - 1)) {
+      acc <- 0
+      for (k in j:(i - 1)) acc <- acc + L[, i, k] * Li[, k, j]
+      Li[, i, j] <- -acc / L[, i, i]
+    }
+  }
+  S <- matrix(0, N, D * (D + 1) / 2); m <- matrix(0, N, D)
+  Sfull <- array(0, c(N, D, D))
+  for (d in seq_len(D)) for (e in seq_len(D)) Sfull[, d, e] <- rowSums(Li[, , d, drop = FALSE] * Li[, , e, drop = FALSE])
+  for (d in seq_len(D)) {
+    m[, d] <- rowSums(matrix(Sfull[, d, ], N, D) * b)
+    for (e in seq_len(d)) S[, .lt_index(d, e)] <- Sfull[, d, e]
+  }
+  list(m = m, Lc = .chol_cov_batch(S, D), nobs = nobs)
+}
+
+# ---- C++ engine ---------------------------------------------------------------
+.mofia_ll_cpp <- function(theta, spec, link = "logit", nodes = .mofia_nodes(31, spec$D),
+                              scores = FALSE, per_person = FALSE, adapt = NULL, return_post = FALSE) {
+  ei <- .engine_inputs(theta, spec); if (is.null(ei)) return(-Inf)
+  pr <- ei$pr; st <- ei$st; X <- spec$X; N <- spec$N; P <- spec$P; D <- spec$D; Tn <- D * (D + 1) / 2
+  NU <- ei$NU; RV <- ei$RV; LAM <- ei$LAM; CL <- ei$CL; cont <- ei$cont; Lr <- ei$Lr
+  YC <- matrix(NaN, N, P)
+  for (j in which(cont)) YC[, j] <- ifelse(is.na(spec$Y[, j]), NaN, spec$Y[, j])
+  Yi <- spec$Y; Yi[, cont] <- 0; storage.mode(Yi) <- "integer"
+  tau_off <- c(0L, cumsum(spec$K - 1L))
   ad <- !is.null(adapt); if (ad) adapt <- .adapt_compat(adapt, D)
   res <- mofia_core_cpp(
     Yi, NU, LAM, as.integer(as.vector(spec$loadings)), unlist(pr$tau, use.names = FALSE), as.integer(tau_off),
@@ -364,22 +427,51 @@
 }
 
 # ---- adaptive quadrature -------------------------------------------------------
+# Nodes are centred and scaled per person at the posterior of the factors. With only
+# continuous items the posterior is normal and known in closed form, so the adaptive
+# rule is exact. Otherwise the posterior moments are refined iteratively, starting from
+# the closed-form posterior given the continuous items (where a person has any) or
+# from a dense non-adaptive pilot rule. Attribute "converged" reports whether the
+# iterations settled.
 .mofia_adapt <- function(theta, spec, link = "logit", nodes = .mofia_nodes(.default_nq(spec$D), spec$D),
-                        adapt = NULL, maxit = 50, tol = 1e-8) {
+                        adapt = NULL, maxit = 100, tol = 1e-8) {
+  cont <- if (is.null(spec$cont)) rep(FALSE, spec$P) else spec$cont
+  if (all(cont)) {
+    cp <- .cont_posterior(theta, spec)
+    if (!is.null(cp) && all(is.finite(cp$m)) && all(is.finite(cp$Lc))) {
+      out <- .adapt_compat(list(m = cp$m, Lc = cp$Lc), spec$D); attr(out, "converged") <- TRUE
+      return(out)
+    }
+  }
   if (is.null(adapt)) {   # pilot pass with a dense non-adaptive rule
     pilot <- .mofia_nodes(c(101, 41, 13, 7, 5, 4)[min(spec$D, 6)], spec$D)
     adapt <- attr(.mofia_ll(theta, spec, link, pilot, return_post = TRUE), "adapt")
+    if (any(cont)) {      # better start where continuous items are observed
+      cp <- .cont_posterior(theta, spec)
+      if (!is.null(adapt) && !is.null(cp) && all(is.finite(cp$Lc))) {
+        use <- cp$nobs > 0
+        adapt <- .adapt_compat(adapt, spec$D)
+        adapt$m[use, ] <- cp$m[use, ]; adapt$Lc[use, ] <- cp$Lc[use, ]
+        adapt <- .adapt_compat(list(m = adapt$m, Lc = adapt$Lc), spec$D)
+      }
+    }
   }
-  ll_old <- -Inf
+  ll_old <- -Inf; converged <- FALSE
   for (it in seq_len(maxit)) {
     ll <- .mofia_ll(theta, spec, link, nodes, adapt = adapt, return_post = TRUE)
     if (!is.finite(ll)) break
     adapt <- attr(ll, "adapt")
-    if (abs(ll - ll_old) < tol) break
+    if (abs(ll - ll_old) < tol) { converged <- TRUE; break }
     ll_old <- as.numeric(ll)
   }
+  if (!converged && is.finite(ll_old) && is.finite(ll) && abs(ll - ll_old) < 1e-6) converged <- TRUE
+  if (!is.null(adapt)) attr(adapt, "converged") <- converged
   adapt
 }
+
+# finer quadrature rule for the accuracy check
+.nq_next <- function(nq, D) if (D == 1) 2L * nq - 1L else as.integer(nq + max(2, 2 * round(nq / 4)))
+.nq_cap <- function(D) c(241, 61, 25, 13, 9, 7)[min(D, 6)]
 
 
 #' Log-likelihood at given parameter values
@@ -391,8 +483,10 @@
 #' @param theta Named parameter vector (names as in `object$par$name`). For a
 #'   fitted object, defaults to its estimates.
 #' @param link `"logit"` or `"probit"` (taken from a fitted object by default).
-#' @param nq Quadrature nodes per factor dimension.
-#' @return The log-likelihood (a number).
+#' @param nq Quadrature nodes per factor dimension (default: the fit's, or the
+#'   default of [mofia()]). Recompute with a larger `nq` to check accuracy.
+#' @return The log-likelihood (a number). A warning is given if the adaptive
+#'   quadrature does not settle.
 #' @examples
 #' data(parabelief)
 #' m <- mofia_model(parabelief, items = c("SpiritsGhosts", "GnomesElves", "Aliens"),
@@ -404,10 +498,13 @@ mofia_loglik <- function(object, theta = NULL, link = NULL, nq = NULL) {
   model <- if (inherits(object, "mofia")) object$model else object
   if (is.null(theta)) { if (!inherits(object, "mofia")) stop("Give 'theta'."); theta <- object$coefficients }
   if (is.null(link)) link <- if (inherits(object, "mofia")) object$link else "logit"
-  if (is.null(nq)) nq <- if (inherits(object, "mofia")) object$nq else .default_nq(model$D)
+  if (is.null(nq)) nq <- if (inherits(object, "mofia")) object$nq else .default_nq(model$D, continuous = all(model$cont))
   if (is.null(names(theta))) stop("'theta' must be named.")
   miss <- setdiff(model$par$name, names(theta)); if (length(miss)) stop("Missing parameter(s): ", paste(miss, collapse = ", "))
   theta <- theta[model$par$name]
   nodes <- .mofia_nodes(nq, model$D)
-  as.numeric(.mofia_ll(theta, model, link, nodes, adapt = .mofia_adapt(theta, model, link, nodes)))
+  ad <- .mofia_adapt(theta, model, link, nodes)
+  if (!isTRUE(attr(ad, "converged")))
+    warning("The adaptive quadrature did not settle; the log-likelihood may be inaccurate.", call. = FALSE)
+  as.numeric(.mofia_ll(theta, model, link, nodes, adapt = ad))
 }

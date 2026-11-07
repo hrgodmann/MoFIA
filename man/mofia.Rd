@@ -13,7 +13,8 @@ mofia(
   starts = 1,
   control = list(),
   verbose = FALSE,
-  threads = NULL
+  threads = NULL,
+  accuracy = 0.005
 )
 }
 \arguments{
@@ -22,7 +23,8 @@ mofia(
 \item{link}{\code{"logit"} (default) or \code{"probit"} for categorical items.}
 
 \item{nq}{Quadrature nodes per factor dimension (default 31, 15, 9, 7, 5, 4
-for 1 to 6 factors).}
+for 1 to 6 factors; 7, 7, 5, 5, 4, 3 for models with only continuous items,
+whose adaptive rule is exact). See \emph{Quadrature}.}
 
 \item{start}{Optional named vector of starting values.}
 
@@ -40,12 +42,16 @@ in \verb{$starts}. Useful when a model may have several local maxima.}
 
 \item{threads}{Number of threads for the likelihood (OpenMP, where
 available). Default: \code{getOption("mofia.threads", 1)}.}
+
+\item{accuracy}{Tolerance of the quadrature check (log-likelihood units), or
+\code{NULL} to skip the check. See \emph{Quadrature}.}
 }
 \value{
 An object of class \code{mofia} with components including
 \code{coefficients}, \code{loglik}, \code{npar}, \code{nobs}, \code{converged}, \code{status} (\code{"ok"},
 \code{"saddle"} or \code{"singular"}), \code{information_eigen} (smallest and largest
-eigenvalue of the information matrix), \code{newton_decrement}, \code{vcov} (a list
+eigenvalue of the information matrix), \code{quadrature} (log-likelihood at the
+estimates for the node counts compared), \code{newton_decrement}, \code{vcov} (a list
 of covariance matrices), \code{scaling} (robust scaling correction factors),
 \code{model}, \code{link} and \code{nq}.
 }
@@ -73,6 +79,19 @@ has expectation zero when the model is correctly specified, so reduced ML
 standard errors are consistent then. Under misspecification it does not
 vanish, and reduced MLR standard errors and scaling factors are not robust;
 use them only as a correct-specification check.
+}
+
+\section{Quadrature}{
+
+The factors are integrated out per person with adaptive Gauss-Hermite
+quadrature: the nodes are centred and scaled at each person's posterior. With
+only continuous items the posterior is normal and known in closed form, so
+the adaptive rule is exact. Otherwise, after fitting, the log-likelihood at
+the estimates is recomputed with a finer rule; if it changes by more than
+\code{accuracy}, the model is refitted with the finer rule (up to three times, with
+a warning if the check still fails). Very discriminating categorical items
+can need many more nodes than the default. The nodes used and the check are
+stored in \verb{$nq} and \verb{$quadrature}.
 }
 
 \section{Convergence}{

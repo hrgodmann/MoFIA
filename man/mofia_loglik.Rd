@@ -14,10 +14,12 @@ fitted object, defaults to its estimates.}
 
 \item{link}{\code{"logit"} or \code{"probit"} (taken from a fitted object by default).}
 
-\item{nq}{Quadrature nodes per factor dimension.}
+\item{nq}{Quadrature nodes per factor dimension (default: the fit's, or the
+default of \code{\link[=mofia]{mofia()}}). Recompute with a larger \code{nq} to check accuracy.}
 }
 \value{
-The log-likelihood (a number).
+The log-likelihood (a number). A warning is given if the adaptive
+quadrature does not settle.
 }
 \description{
 Evaluates the marginal log-likelihood of a model at user-supplied parameter

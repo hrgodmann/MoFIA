@@ -74,7 +74,9 @@ metric
 
 `mofia()` uses the logistic link for categorical items by default
 (`link = "probit"` is also available). The factors are integrated out by
-adaptive Gauss-Hermite quadrature. A fit counts as converged when the
+adaptive Gauss-Hermite quadrature; after fitting, the log-likelihood is
+recomputed with a finer rule, and the model is refitted with more nodes if it
+changes noticeably (the printout shows this check). A fit counts as converged when the
 information matrix is positive definite (a maximum, not a saddle point, and an
 identified model) and the Newton decrement, the log-likelihood gain still
 available from one more Newton step, is negligible. Otherwise no standard errors

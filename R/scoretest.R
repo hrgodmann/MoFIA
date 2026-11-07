@@ -51,12 +51,17 @@
 #' scalar <- mofia(mofia_model(parabelief, items = ub, moderators = c("Age", "Male")))
 #' mofia_score_test(scalar, by = "item")
 #' }
+#' @details The fit must have converged (see [mofia()]); otherwise the test is
+#'   refused. Each test (parameter or item group) is checked for identification
+#'   given the fitted model and reported as `NA` if it is not identified.
 #' @export
 mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item"), se = c("MLR", "ML"),
                              adjust = "holm") {
   by <- match.arg(by); se <- match.arg(se)
   if (!inherits(fit, "mofia")) stop("'fit' must be a fitted mofia object.")
-  if (is.null(fit$vcov)) stop("The fit has no information matrix (fit with se = TRUE).")
+  if (is.null(fit$vcov)) stop("No information matrix available: ", fit$se_note %||% "fit with se = TRUE", ".", call. = FALSE)
+  if (!isTRUE(fit$converged))
+    stop("The fit has not converged; score tests need the maximum of the restricted model.", call. = FALSE)
   model <- fit$model
   if (is.null(candidates)) candidates <- .all_candidates(model)
   candidates <- unique(candidates)
@@ -121,7 +126,7 @@ mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item")
   mm <- model$mean_mod; mm[] <- TRUE; vm <- model$var_mod; vm[] <- TRUE
   cm <- model$cor_mod; if (model$D == 2 || isTRUE(model$experimental_cor)) cm[] <- TRUE
   full <- .rebuild(model, loading_mod = lm, threshold_mod = tm, mean_mod = mm, var_mod = vm, cor_mod = cm,
-                   resvar_mod = rm_)
+                   resvar_mod = rm_, check_identification = FALSE)
   setdiff(full$par$name, model$par$name)
 }
 
@@ -143,7 +148,8 @@ mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item")
     }, error = function(e) FALSE)
     if (!ok) stop("Not a moderation parameter of this model: ", n)
   }
-  .rebuild(model, loading_mod = lm, threshold_mod = tm, mean_mod = mm, var_mod = vm, cor_mod = cm, resvar_mod = rm_)
+  .rebuild(model, loading_mod = lm, threshold_mod = tm, mean_mod = mm, var_mod = vm, cor_mod = cm, resvar_mod = rm_,
+           check_identification = FALSE)
 }
 
 # group label: parameter type and item/factor (all moderators together)

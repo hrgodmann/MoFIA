@@ -26,7 +26,8 @@ a regular expression selecting parameters, e.g. \verb{"^beta\\\[DevilPossession,
 }
 \value{
 A data frame with the Wald statistic, degrees of freedom, p-value and
-the tested parameters.
+the tested parameters. The fit must have converged; otherwise the test is
+refused.
 }
 \description{
 Wald test that a set of parameters is zero

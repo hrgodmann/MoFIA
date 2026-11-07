@@ -25,7 +25,9 @@ original scale). Default: the fitted data.}
 coding), \code{"prob"} (category probabilities) or \code{"scores"} (EAP factor
 scores for the fitted data; see \code{\link[=mofia_scores]{mofia_scores()}}).}
 
-\item{nq}{Quadrature nodes per factor for the integration.}
+\item{nq}{Not used (kept for compatibility). Each item's linear predictor is
+normal given the moderators, so probit probabilities are exact and logit
+probabilities use an accurate one-dimensional rule.}
 
 \item{...}{Not used.}
 }

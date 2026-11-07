@@ -14,7 +14,8 @@
 #' @param information `"default"` (exact), `"reduced"` or `"exact"`; see [mofia()].
 #' @param sb2010 Also report the strictly positive Satorra-Bentler (2010)
 #'   version, which evaluates the scaling factor of `fit1` at the estimates of
-#'   `fit0` (one extra information computation).
+#'   `fit0` (one extra information computation). Requires models nested by
+#'   parameter names (the same identification).
 #' @param check_nested Stop if the parameter names of `fit0` are not a subset of
 #'   those of `fit1`? Set to `FALSE` only for models that are nested in a way
 #'   the names cannot show (e.g. the same model under marker and variance
@@ -61,6 +62,10 @@ mofia_lrt <- function(fit0, fit1, scaled = TRUE, information = c("default", "red
   out <- data.frame(test = "Satorra-Bentler (2001)", LR = LR, df = df, c0 = c0, c1 = c1, cd = cd,
                     statistic = LR / cd)
   if (sb2010) {
+    if (!all(names(fit0$coefficients) %in% names(fit1$coefficients)))
+      stop("The Satorra-Bentler (2010) test needs the restricted estimates in the larger model's parameterization; ",
+           "this is only implemented for models nested by parameter names. Refit both models with the same ",
+           "identification (the test statistic does not depend on it).", call. = FALSE)
     th10 <- stats::setNames(numeric(p1), names(fit1$coefficients))
     th10[names(fit0$coefficients)] <- fit0$coefficients
     c10 <- .scaling_at(fit1, th10)[[info]] %||% NA_real_
@@ -125,7 +130,8 @@ mofia_lrt <- function(fit0, fit1, scaled = TRUE, information = c("default", "red
 #' @param information `"default"` (exact), `"reduced"` or `"exact"`; see [mofia()].
 #' @param regex Treat `params` as a regular expression?
 #' @return A data frame with the Wald statistic, degrees of freedom, p-value and
-#'   the tested parameters.
+#'   the tested parameters. The fit must have converged; otherwise the test is
+#'   refused.
 #' @examples
 #' \donttest{
 #' data(parabelief)
@@ -139,6 +145,8 @@ mofia_lrt <- function(fit0, fit1, scaled = TRUE, information = c("default", "red
 mofia_wald <- function(fit, params, se = c("MLR", "ML", "MLF"), information = c("default", "reduced", "exact"),
                        regex = FALSE) {
   se <- match.arg(se)
+  if (!isTRUE(fit$converged))
+    stop("The fit has not converged; a Wald test needs the maximum-likelihood estimates.", call. = FALSE)
   nms <- names(fit$coefficients)
   idx <- if (regex) grep(params, nms) else match(params, nms)
   if (regex && !length(idx)) stop("No parameter matches '", params, "'.")

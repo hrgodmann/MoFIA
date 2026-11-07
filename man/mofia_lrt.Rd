@@ -24,7 +24,8 @@ mofia_lrt(
 
 \item{sb2010}{Also report the strictly positive Satorra-Bentler (2010)
 version, which evaluates the scaling factor of \code{fit1} at the estimates of
-\code{fit0} (one extra information computation).}
+\code{fit0} (one extra information computation). Requires models nested by
+parameter names (the same identification).}
 
 \item{check_nested}{Stop if the parameter names of \code{fit0} are not a subset of
 those of \code{fit1}? Set to \code{FALSE} only for models that are nested in a way

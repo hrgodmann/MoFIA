@@ -25,6 +25,17 @@
 #' vanish, and reduced MLR standard errors and scaling factors are not robust;
 #' use them only as a correct-specification check.
 #'
+#' @section Quadrature:
+#' The factors are integrated out per person with adaptive Gauss-Hermite
+#' quadrature: the nodes are centred and scaled at each person's posterior. With
+#' only continuous items the posterior is normal and known in closed form, so
+#' the adaptive rule is exact. Otherwise, after fitting, the log-likelihood at
+#' the estimates is recomputed with a finer rule; if it changes by more than
+#' `accuracy`, the model is refitted with the finer rule (up to three times, with
+#' a warning if the check still fails). Very discriminating categorical items
+#' can need many more nodes than the default. The nodes used and the check are
+#' stored in `$nq` and `$quadrature`.
+#'
 #' @section Convergence:
 #' A fit counts as converged when the information matrix at the solution is
 #' positive definite (the solution is a maximum, not a saddle point, and the
@@ -38,7 +49,10 @@
 #' @param model A `mofia_model` from [mofia_model()].
 #' @param link `"logit"` (default) or `"probit"` for categorical items.
 #' @param nq Quadrature nodes per factor dimension (default 31, 15, 9, 7, 5, 4
-#'   for 1 to 6 factors).
+#'   for 1 to 6 factors; 7, 7, 5, 5, 4, 3 for models with only continuous items,
+#'   whose adaptive rule is exact). See *Quadrature*.
+#' @param accuracy Tolerance of the quadrature check (log-likelihood units), or
+#'   `NULL` to skip the check. See *Quadrature*.
 #' @param start Optional named vector of starting values.
 #' @param starts Number of starts. The first uses the default starting values;
 #'   the others perturb them randomly (set a seed for reproducibility). The fit
@@ -54,7 +68,8 @@
 #' @return An object of class `mofia` with components including
 #'   `coefficients`, `loglik`, `npar`, `nobs`, `converged`, `status` (`"ok"`,
 #'   `"saddle"` or `"singular"`), `information_eigen` (smallest and largest
-#'   eigenvalue of the information matrix), `newton_decrement`, `vcov` (a list
+#'   eigenvalue of the information matrix), `quadrature` (log-likelihood at the
+#'   estimates for the node counts compared), `newton_decrement`, `vcov` (a list
 #'   of covariance matrices), `scaling` (robust scaling correction factors),
 #'   `model`, `link` and `nq`.
 #' @seealso [mofia_model()], [summary.mofia()], [anova.mofia()],
@@ -79,12 +94,13 @@
 #' summary(fit)
 #' @export
 mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, se = TRUE,
-                  starts = 1, control = list(), verbose = FALSE, threads = NULL) {
+                  starts = 1, control = list(), verbose = FALSE, threads = NULL, accuracy = 0.005) {
   if (!inherits(model, "mofia_model")) stop("'model' must be created with mofia_model().")
   link <- match.arg(link)
-  if (all(model$cont)) link <- "logit"   # irrelevant for continuous items
+  cont_only <- all(model$cont)
+  if (cont_only) link <- "logit"   # irrelevant for continuous items
   if (!is.null(threads)) { old <- options(mofia.threads = threads); on.exit(options(old), add = TRUE) }
-  if (is.null(nq)) nq <- .default_nq(model$D)
+  if (is.null(nq)) nq <- .default_nq(model$D, continuous = cont_only)
   starts <- max(1L, as.integer(starts))
   call <- match.call()
   nodes <- .mofia_nodes(nq, model$D)
@@ -106,7 +122,42 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   best <- which.max(lls); run <- runs[[best]]
   if (starts > 1 && lls[best] - lls[1] > 1e-3)
     message(sprintf("Random start %d reached a higher log-likelihood than the default start (+%.4f).", best, lls[best] - lls[1]))
-  theta <- run$theta; adapt <- .mofia_adapt(theta, model, link, nodes, run$adapt); opt <- run$opt; outer <- run$outer
+  theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- run$outer
+
+  # quadrature accuracy: recompute the log-likelihood at the estimates with a finer rule;
+  # if it changes by more than 'accuracy', refit with the finer rule (up to 3 times).
+  # Models with only continuous items use exact adaptation and need no check.
+  quad <- NULL
+  if (!is.null(accuracy) && !cont_only) {
+    quad <- data.frame(nq = integer(0), logLik = numeric(0))
+    for (ref in 0:3) {
+      adapt <- .mofia_adapt(theta, model, link, nodes, adapt)
+      ll0 <- as.numeric(.mofia_ll(theta, model, link, nodes, adapt = adapt))
+      nqf <- .nq_next(nq, model$D)
+      if (nqf > .nq_cap(model$D)) {
+        if (ref > 0) warning(sprintf("The quadrature check reached its limit (%d nodes per factor); the log-likelihood may still be inaccurate.", nq), call. = FALSE)
+        break
+      }
+      nodes_f <- .mofia_nodes(nqf, model$D)
+      llf <- as.numeric(.mofia_ll(theta, model, link, nodes_f, adapt = .mofia_adapt(theta, model, link, nodes_f, adapt)))
+      quad <- rbind(quad[quad$nq != nq, ], data.frame(nq = c(nq, nqf), logLik = c(ll0, llf)))
+      if (is.finite(llf) && is.finite(ll0) && abs(llf - ll0) <= accuracy) break
+      if (ref == 3) {
+        warning(sprintf(paste0("The log-likelihood still changes by %.3g between %d and %d quadrature nodes per factor; ",
+                               "results may be inaccurate (increase nq)."), llf - ll0, nq, nqf), call. = FALSE)
+        break
+      }
+      if (verbose) message(sprintf("quadrature check: log-likelihood changes by %.3g with %d nodes; refitting with %d", llf - ll0, nqf, nqf))
+      nq <- nqf; nodes <- nodes_f
+      run <- .mofia_optimize(model, link, nodes, theta, ctrl, verbose)
+      theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- outer + run$outer
+    }
+    rownames(quad) <- NULL
+  }
+  adapt <- .mofia_adapt(theta, model, link, nodes, adapt)
+  if (!isTRUE(attr(adapt, "converged")))
+    warning("The adaptive quadrature did not settle at the solution; the log-likelihood may be inaccurate ",
+            "(very concentrated posteriors, e.g. near-deterministic items).", call. = FALSE)
   ll <- .mofia_ll(theta, model, link, nodes, scores = TRUE, adapt = adapt)
   if (!is.finite(ll)) stop("Estimation failed: the log-likelihood is not finite at the solution.")
   g <- colSums(attr(ll, "scores"))
@@ -114,7 +165,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
               gradient = g, max_abs_grad = max(abs(g)), converged = max(abs(g)) < 1e-3,
               newton_decrement = NA_real_, optimizer = list(convergence = opt$convergence, message = opt$message,
               iterations = opt$iterations, outer_iterations = outer),
-              link = link, nq = nq, adapt = adapt, time = unname(proc.time()[[3]] - t0),
+              link = link, nq = nq, quadrature = quad, adapt = adapt, time = unname(proc.time()[[3]] - t0),
               starts = if (starts > 1) data.frame(start = seq_len(starts), logLik = lls) else NULL,
               model = model, call = call)
   class(fit) <- "mofia"

@@ -19,8 +19,10 @@ a common scale.
   number of factors; accuracy has been checked for up to three); variance or
   marker-item identification; missing item responses (full information,
   assuming missingness at random).
-* Marginal maximum likelihood with adaptive Gauss-Hermite quadrature and
-  analytic gradients in C++ (multithreaded with OpenMP where available).
+* Marginal maximum likelihood with adaptive Gauss-Hermite quadrature (exact for
+  continuous items; checked against a finer rule and refined automatically
+  otherwise) and analytic gradients in C++ (multithreaded with OpenMP where
+  available).
 * ML, robust (MLR, sandwich with the exact observed information) and
   score-based (MLF) standard errors.
 * Scaled likelihood-ratio tests (Satorra-Bentler), Wald tests, and score

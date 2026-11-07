@@ -51,8 +51,13 @@ print.mofia <- function(x, digits = 3, ...) {
   cat(sprintf("  %d item(s) (%s), %d factor(s), moderators: %s\n", m$P,
               paste(c(if (m$P - nc) sprintf("%d categorical", m$P - nc), if (nc) sprintf("%d continuous", nc)), collapse = ", "),
               m$D, if (m$Q) paste(m$moderators, collapse = ", ") else "none"))
-  cat(sprintf("  N = %d, %d parameters%s, %d^%d adaptive quadrature nodes\n", x$nobs, x$npar,
-              if (m$P > nc) paste0(", ", x$link, " link") else "", x$nq, m$D))
+  cat(sprintf("  N = %d, %d parameters%s, %d^%d adaptive quadrature nodes%s\n", x$nobs, x$npar,
+              if (m$P > nc) paste0(", ", x$link, " link") else "", x$nq, m$D,
+              if (nc == m$P) " (exact for continuous items)"
+              else if (!is.null(x$quadrature) && nrow(x$quadrature) >= 2) {
+                q <- x$quadrature; k <- nrow(q)
+                sprintf(" (check: logLik changes by %.1e with %d nodes)", q$logLik[k] - q$logLik[k - 1], q$nq[k])
+              } else ""))
   cat(sprintf("  logLik = %.3f, AIC = %.2f, BIC = %.2f\n", x$loglik, stats::AIC(x), stats::BIC(x)))
   status <- x$status %||% "ok"
   cat(sprintf("  %s%s\n", if (isTRUE(x$converged)) "Converged" else "NOT converged",
@@ -96,6 +101,9 @@ print.summary.mofia <- function(x, digits = 3, ...) {
               if (!is.na(x$information)) sprintf(" (%s information)", x$information) else ""))
   if (!is.null(x$fit$scaling) && !is.na(x$information))
     cat(sprintf("Robust scaling correction factor: %.4f\n", x$fit$scaling[[x$information]]))
+  if (!is.null(x$fit$vcov) && !isTRUE(x$fit$converged))
+    cat("WARNING: the fit has not converged. Estimates and standard errors refer to an unfinished solution;",
+        "do not use them for inference.\n")
   if (is.null(x$fit$vcov)) cat("Standard errors not available: ", x$fit$se_note %||% "fitted with se = FALSE", ".\n", sep = "")
   else if (anyNA(x$coefficients$se)) cat("Some standard errors are not available (non-positive variance estimates).\n")
   groups <- list(tau = "Thresholds", nu0 = "Intercepts", lambda0 = "Loadings (baseline)",

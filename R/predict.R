@@ -30,7 +30,7 @@ mofia_scores <- function(object) {
   model <- object$model; theta <- object$coefficients; D <- model$D; N <- model$N
   nodes <- .mofia_nodes(object$nq, D)
   ll <- .mofia_ll(theta, model, object$link, nodes, per_person = TRUE, adapt = object$adapt, return_post = TRUE)
-  post <- attr(ll, "adapt")                                  # z | y: mean m, Cholesky Lc
+  post <- .adapt_compat(attr(ll, "adapt"), D)               # z | y: mean m, Cholesky Lc
   pr <- .unpack(theta, model); st <- .structural(pr, model)
   Cf <- function(d, e) if (e > d) 0 else st$s[, d] * (if (D == 1) 1 else st$Lr[[d]][[e]])   # eta = mu + C z
   Lz <- function(d, e) if (e > d) 0 else post$Lc[, .lt_index(d, e)]
@@ -48,17 +48,48 @@ mofia_scores <- function(object) {
   out
 }
 
-# person x node quantities under the factors' moderated (prior) distribution
-.prior_eta <- function(theta, model, X, nq) {
+# Marginal (over the factors) moments of each item's linear predictor given the
+# moderators: a_ij = nu_ij + lambda_ij' eta_i with eta_i ~ N(mu_i, Sigma_i), so
+# a_ij ~ N(m_ij, s_ij^2), m = nu + lambda' mu, s^2 = lambda' Sigma lambda = |C' lambda|^2.
+.marginal_lp <- function(theta, model, X) {
   sp <- model; sp$X <- X; sp$N <- nrow(X)
-  pr <- .unpack(theta, sp); st <- .structural(pr, sp)
-  if (!st$ok) stop("The parameters imply an invalid factor correlation for some moderator values.")
-  nodes <- .mofia_nodes(nq, model$D); D <- model$D
-  eta <- lapply(seq_len(D), function(d) {
-    Reduce(`+`, lapply(seq_len(d), function(e) outer(st$s[, d] * (if (D == 1) 1 else st$Lr[[d]][[e]]), nodes$T[, e])),
-           init = matrix(st$mu[, d], nrow(X), nrow(nodes$T)))
-  })
-  list(pr = pr, eta = eta, w = exp(nodes$logw))
+  ei <- .engine_inputs(theta, sp)
+  if (is.null(ei)) stop("The parameters imply an invalid factor correlation for some moderator values.")
+  N <- nrow(X); P <- model$P; D <- model$D
+  Cf <- function(d, e) if (e > d) 0 else ei$CL[, .lt_index(d, e)]
+  m <- s <- matrix(0, N, P)
+  for (j in seq_len(P)) {
+    lam <- matrix(sapply(seq_len(D), function(d) ei$LAM[, j + P * (d - 1)]), N, D)
+    m[, j] <- ei$NU[, j] + rowSums(lam * ei$st$mu)
+    v2 <- 0
+    for (e in seq_len(D)) v2 <- v2 + Reduce(`+`, lapply(e:D, function(d) lam[, d] * Cf(d, e)))^2
+    s[, j] <- sqrt(v2)
+  }
+  list(m = m, s = s, pr = ei$pr)
+}
+
+# E[plogis(mu + s Z)], Z ~ N(0, 1): Gauss-Hermite over Z when s <= 4, otherwise over
+# the logistic variable L (E[pnorm((mu - L) / s)]) with Gauss-Legendre on its CDF scale;
+# absolute error about 1e-6 or less
+.logit_normal <- function(mu, s) {
+  out <- numeric(length(mu)); small <- s <= 4
+  if (any(small)) {
+    gh <- statmod::gauss.quad.prob(101, dist = "normal")
+    out[small] <- drop(stats::plogis(outer(mu[small], rep(1, 101)) + outer(s[small], gh$nodes)) %*% gh$weights)
+  }
+  if (any(!small)) {
+    gl <- statmod::gauss.quad(200, kind = "legendre"); u <- (gl$nodes + 1) / 2
+    out[!small] <- drop(stats::pnorm(outer(mu[!small], stats::qlogis(u), "-") / s[!small]) %*% (gl$weights / 2))
+  }
+  out
+}
+
+# marginal category probabilities of a categorical item: P(y >= k) = E F(a - tau_k)
+.marginal_probs <- function(m, s, tau, link) {
+  cum <- lapply(tau, function(t)
+    if (link == "probit") stats::pnorm((m - t) / sqrt(1 + s^2)) else .logit_normal(m - t, s))
+  cum <- c(list(rep(1, length(m))), cum, list(rep(0, length(m))))
+  lapply(seq_len(length(tau) + 1), function(k) pmax(cum[[k]] - cum[[k + 1]], 0))
 }
 
 # category probabilities of item j given a matrix of linear predictors (persons x nodes):
@@ -97,7 +128,9 @@ mofia_scores <- function(object) {
 #' @param type `"expected"` (expected item scores, in the items' original
 #'   coding), `"prob"` (category probabilities) or `"scores"` (EAP factor
 #'   scores for the fitted data; see [mofia_scores()]).
-#' @param nq Quadrature nodes per factor for the integration.
+#' @param nq Not used (kept for compatibility). Each item's linear predictor is
+#'   normal given the moderators, so probit probabilities are exact and logit
+#'   probabilities use an accurate one-dimensional rule.
 #' @param ... Not used.
 #' @return For `"expected"`, a persons x items matrix. For `"prob"`, a list with
 #'   one persons x categories matrix per categorical item (continuous items are
@@ -120,19 +153,11 @@ predict.mofia <- function(object, newdata = NULL, type = c("expected", "prob", "
     return(mofia_scores(object))
   }
   X <- if (is.null(newdata)) model$X else .design_X(model, newdata)
-  if (is.null(nq)) nq <- c(41, 21, 11, 7, 5, 4)[min(model$D, 6)]
-  pe <- .prior_eta(object$coefficients, model, X, nq); pr <- pe$pr
+  ml <- .marginal_lp(object$coefficients, model, X); pr <- ml$pr
   probs <- list(); expd <- matrix(NA_real_, nrow(X), model$P, dimnames = list(NULL, model$items))
   for (j in seq_len(model$P)) {
-    if (model$cont[j]) {
-      mu <- pr$nu0[j] + drop(X %*% pr$B[j, ])
-      for (d in seq_len(model$D)) if (model$loadings[j, d])
-        mu <- mu + (pr$L0[j, d] + drop(X %*% pr$L1[j, d, ])) * drop(pe$eta[[d]] %*% pe$w)
-      expd[, j] <- mu
-      next
-    }
-    A <- .item_lp(pr, j, X, pe$eta, model$loadings)
-    pk <- vapply(.cat_probs(A, pr$tau[[j]], object$link), function(p) drop(p %*% pe$w), numeric(nrow(X)))
+    if (model$cont[j]) { expd[, j] <- ml$m[, j]; next }
+    pk <- vapply(.marginal_probs(ml$m[, j], ml$s[, j], pr$tau[[j]], object$link), identity, numeric(nrow(X)))
     pk <- matrix(pk, nrow(X)); colnames(pk) <- model$levels[[j]]
     probs[[model$items[j]]] <- pk
     expd[, j] <- drop(pk %*% model$levels[[j]])
@@ -159,6 +184,8 @@ fitted.mofia <- function(object, ...) predict.mofia(object, type = "expected")
 confint.mofia <- function(object, parm, level = 0.95, se = c("MLR", "ML", "MLF"),
                           information = c("default", "reduced", "exact"), ...) {
   se <- match.arg(se)
+  if (!isTRUE(object$converged))
+    warning("The fit has not converged; these intervals refer to an unfinished solution.", call. = FALSE)
   est <- object$coefficients
   s <- .se_from_vcov(vcov(object, se, information))
   if (!missing(parm)) { est <- est[parm]; s <- s[parm] }

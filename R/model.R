@@ -411,8 +411,11 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
 #    linear).
 # Exactly unidentified patterns are errors, functional-form-only ones warnings. At
 # least one anchor item per factor and moderator avoids both.
+.mofia_state <- new.env(parent = emptyenv())   # internal switches (not user options)
+
 .check_identification <- function(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param) {
   D <- ncol(loadings); Q <- ncol(X); if (!Q) return(invisible())
+  if (isFALSE(.mofia_state$check_identification)) return(invisible())
   items <- rownames(loadings); factors <- colnames(loadings); mods <- colnames(X)
   binary <- apply(X, 2, function(v) length(unique(v)) == 2)
   errs <- warns <- character(0)
@@ -642,8 +645,14 @@ mofia_drop <- function(model, drop) {
   .rebuild(model, loading_mod = lm, threshold_mod = tm, mean_mod = mm, var_mod = vm, cor_mod = cm, resvar_mod = rm_)
 }
 
-# rebuild a model from its own data with changed moderation patterns
-.rebuild <- function(model, ...) {
+# rebuild a model from its own data with changed moderation patterns. With
+# check_identification = FALSE the model is only used to evaluate scores (e.g. the
+# union of all score-test candidates, which need not be identified jointly).
+.rebuild <- function(model, ..., check_identification = TRUE) {
+  if (!check_identification) {
+    old <- .mofia_state$check_identification; .mofia_state$check_identification <- FALSE
+    on.exit(.mofia_state$check_identification <- old)
+  }
   Y <- model$Y
   for (j in seq_len(model$P)) if (!model$cont[j]) Y[, j] <- model$levels[[j]][Y[, j] + 1]
   dat <- data.frame(Y, model$X, check.names = FALSE)

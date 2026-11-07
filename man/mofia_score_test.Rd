@@ -45,6 +45,11 @@ model's estimates. This makes it cheap to screen all items for DIF
 (threshold/intercept and loading moderation) or to check structural
 moderation, like modification indices in SEM.
 }
+\details{
+The fit must have converged (see \code{\link[=mofia]{mofia()}}); otherwise the test is
+refused. Each test (parameter or item group) is checked for identification
+given the fitted model and reported as \code{NA} if it is not identified.
+}
 \section{Statistics}{
 
 Let \eqn{U_a} be the score of the candidate parameters at the restricted

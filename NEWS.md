@@ -1,5 +1,31 @@
 # MoFIA 0.1.0
 
+## Corrections after the second external review (7 November 2026)
+
+* Quadrature accuracy is checked after every fit: the log-likelihood at the
+  estimates is recomputed with a finer rule, and the model is refitted with the
+  finer rule when it changes by more than `accuracy` (default 0.005). Very
+  discriminating items can need many more nodes than the default; the check is
+  stored in `$quadrature` and printed.
+* With only continuous items the posterior of the factors is normal, and the
+  adaptive rule now uses it in closed form: the integration is exact also for
+  very precise items (fewer nodes by default, faster fits). In mixed models it
+  is the starting point of the adaptation. Adaptation that does not settle now
+  gives a warning instead of a silently wrong likelihood.
+* `predict()` computes marginal probabilities exactly for probit items and
+  with an accurate one-dimensional rule for logit items (it used a coarse
+  fixed grid that could be off by several percentage points).
+* `mofia_score_test()` works again when all candidate effects together would
+  not be identified (e.g. one binary moderator); each test is still checked on
+  its own.
+* `mofia_wald()` and `mofia_score_test()` refuse fits that have not converged;
+  summaries and `confint()` of such fits carry a warning.
+* `mofia_lrt(sb2010 = TRUE)` refuses models that are not nested by parameter
+  names, instead of failing.
+* Item plots work for items on the second or later factor and for
+  cross-loading items, and no longer print a note about standard errors.
+* `mofia_scores()` works with the R reference engine.
+
 ## Corrections after the external review (7 November 2026)
 
 * Robust (MLR) standard errors, scaled likelihood-ratio tests and Wald tests now

@@ -61,8 +61,9 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
     else if (inf$type == "binary") inf$values else inf$levels
   nd <- .reference_data(des, length(grid), at); nd[[moderator]] <- grid
   X <- .design_X(model, nd)
-  V <- tryCatch(vcov(x, se), error = function(e) NULL); th <- x$coefficients; pt <- model$par
-  if (is.null(V)) message("No standard errors available; the plot shows estimates without bands.")
+  th <- x$coefficients; pt <- model$par
+  V <- if (type == "items") NULL else tryCatch(vcov(x, se), error = function(e) NULL)
+  if (type != "items" && is.null(V)) message("No standard errors available; the plot shows estimates without bands.")
   z <- stats::qnorm(1 - (1 - level) / 2)
   cont <- inf$type == "continuous"
   xs <- if (cont) grid else seq_along(grid)
@@ -152,7 +153,7 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
     j <- match(it, model$items); d <- which(model$loadings[j, ])[1]
     E <- sapply(seq_along(grid), function(g) {
       Xg <- X[g, , drop = FALSE]
-      etal <- lapply(seq_len(model$D), function(e) matrix(if (e == d) eta else 0, 1))
+      etal <- lapply(seq_len(model$D), function(e) matrix(if (e == d) eta else 0, 1, length(eta)))
       A <- .item_lp(pr, j, Xg, etal, model$loadings)
       if (model$cont[j]) return(drop(A) + pr$nu0[j])
       pk <- .cat_probs(A, pr$tau[[j]], x$link)
