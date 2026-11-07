@@ -6,13 +6,21 @@
 #' @param object A `mofia_model` or a fitted `mofia` object (whose estimates and
 #'   link are then the defaults).
 #' @param theta Named parameter vector (names as in `object$par$name`).
-#' @param X Moderator values: a matrix or data frame with the model's moderator
-#'   columns. Default: the moderator values of the model's data.
+#' @param newdata Optional data frame with the moderator *variables* on their
+#'   original scale (as for [predict.mofia()]). The returned data contain these
+#'   variables, so they can be refitted with the same model specification
+#'   (formula, standardization).
+#' @param X Alternatively, moderator values on the model's *design* scale: a
+#'   matrix or data frame with the model's moderator columns (`m$moderators`;
+#'   dummy codes, interactions, standardized values). The returned data then
+#'   contain these design columns.
 #' @param link `"logit"` or `"probit"` for categorical items.
 #' @param seed Optional random seed.
 #' @return A data frame with the simulated items (categorical items in the
-#'   original coding of the model's data) and the moderators. The simulated
-#'   factor scores are attached as attribute `"eta"`.
+#'   original coding of the model's data) and the moderators. Without
+#'   `newdata` and `X`, the moderator variables of the model's data are used
+#'   and returned on their original scale. The simulated factor scores are
+#'   attached as attribute `"eta"`, the design matrix used as attribute `"X"`.
 #' @examples
 #' \donttest{
 #' data(parabelief)
@@ -22,7 +30,7 @@
 #' head(sim)
 #' }
 #' @export
-mofia_simulate <- function(object, theta = NULL, X = NULL, link = NULL, seed = NULL) {
+mofia_simulate <- function(object, theta = NULL, newdata = NULL, X = NULL, link = NULL, seed = NULL) {
   model <- if (inherits(object, "mofia")) object$model else object
   if (is.null(theta)) {
     if (!inherits(object, "mofia")) stop("Give 'theta'.")
@@ -32,8 +40,23 @@ mofia_simulate <- function(object, theta = NULL, X = NULL, link = NULL, seed = N
   link <- match.arg(link, c("logit", "probit"))
   miss <- setdiff(model$par$name, names(theta)); if (length(miss)) stop("Missing parameter(s): ", paste(miss, collapse = ", "))
   theta <- theta[model$par$name]
-  if (is.null(X)) X <- model$X
-  X <- as.matrix(as.data.frame(X)[, model$moderators, drop = FALSE]); storage.mode(X) <- "double"
+  if (!is.null(newdata) && !is.null(X)) stop("Give either 'newdata' (original scale) or 'X' (design scale), not both.")
+  if (!is.null(X)) {
+    X <- as.data.frame(X)
+    miss <- setdiff(model$moderators, names(X))
+    if (length(miss)) stop("'X' lacks the moderator column(s): ", paste(miss, collapse = ", "),
+                           ". Give original-scale variables as 'newdata' instead.")
+    X <- as.matrix(X[, model$moderators, drop = FALSE]); storage.mode(X) <- "double"
+    modout <- as.data.frame(X, check.names = FALSE)
+  } else if (!is.null(newdata)) {
+    newdata <- as.data.frame(newdata)
+    X <- .design_X(model, newdata)
+    modout <- newdata[, model$design$vars, drop = FALSE]
+  } else {
+    X <- model$X
+    modout <- model$moddata %||% as.data.frame(X, check.names = FALSE)
+  }
+  if (anyNA(X) || any(!is.finite(X))) stop("Moderator values must be finite.")
   if (!is.null(seed)) set.seed(seed)
   sp <- model; sp$X <- X; sp$N <- nrow(X); N <- nrow(X)
   pr <- .unpack(theta, sp); st <- .structural(pr, sp)
@@ -56,7 +79,8 @@ mofia_simulate <- function(object, theta = NULL, X = NULL, link = NULL, seed = N
       Y[, j] <- model$levels[[j]][k + 1]
     }
   }
-  out <- data.frame(Y, X, check.names = FALSE)
-  attr(out, "eta") <- eta
+  rownames(modout) <- NULL
+  out <- data.frame(Y, modout, check.names = FALSE)
+  attr(out, "eta") <- eta; attr(out, "X") <- X
   out
 }

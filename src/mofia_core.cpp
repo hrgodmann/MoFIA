@@ -27,21 +27,57 @@
 #endif
 using namespace Rcpp;
 
-static inline double plogis_(double x) {
-  if (x >= 0) { double e = std::exp(-x); return 1.0 / (1.0 + e); }
-  double e = std::exp(x); return e / (1.0 + e);
-}
-static inline double Fcdf(double x, int link) {
-  if (x == R_PosInf) return 1.0;
-  if (x == R_NegInf) return 0.0;
-  return link == 0 ? plogis_(x) : R::pnorm(x, 0.0, 1.0, 1, 0);
-}
-static inline double fpdf(double x, int link) {
-  if (!R_FINITE(x)) return 0.0;
-  if (link == 0) { double e = std::exp(-std::fabs(x)); return e / ((1.0 + e) * (1.0 + e)); }
-  return R::dnorm(x, 0.0, 1.0, 0);
-}
 static inline int lt(int d, int e) { return d * (d + 1) / 2 + e; }   // 0-based, d >= e
+
+// ---- category probabilities ---------------------------------------------------
+// For a category with bounds lo < hi and linear predictor a, p = F(u) - F(v) with
+// u = hi - a, v = lo - a (u = +Inf / v = -Inf for the open ends). To avoid
+// cancellation, p is computed in the tail closest to the interval: if u + v > 0
+// (interval mostly in the upper half), p = F(-v) - F(-u). Differences u, v are
+// used directly, so no exponential of the predictor can overflow. If p underflows,
+// log p and the derivative ratios f/p are computed on the log scale.
+static inline void logis_Ff(double x, double &F, double &f) {   // F(x), f(x); x finite
+  double e = std::exp(-std::fabs(x)), d = 1.0 + e;
+  F = x >= 0 ? 1.0 / d : e / d; f = e / (d * d);
+}
+static inline double logF_(double x, int link) {
+  if (x == R_PosInf) return 0.0;
+  if (x == R_NegInf) return R_NegInf;
+  if (link == 0) return x >= 0 ? -std::log1p(std::exp(-x)) : x - std::log1p(std::exp(x));
+  return R::pnorm(x, 0.0, 1.0, 1, 1);
+}
+static inline double logf_(double x, int link) {
+  if (!R_FINITE(x)) return R_NegInf;
+  if (link == 0) { double ax = std::fabs(x); return -ax - 2.0 * std::log1p(std::exp(-ax)); }
+  return R::dnorm(x, 0.0, 1.0, 1);
+}
+static inline double log1mexp_(double x) {      // log(1 - exp(x)), x <= 0
+  if (x == R_NegInf) return 0.0;
+  return x > -M_LN2 ? std::log(-std::expm1(x)) : std::log1p(-std::exp(x));
+}
+// returns true if p is returned for the running product (p > 1e-30, so the product
+// cannot underflow before it is logged), false if logp is returned;
+// rlo = f(v)/p, rhi = f(u)/p in both cases
+static inline bool cat_prob(double u, double v, int link, double &p, double &logp, double &rlo, double &rhi) {
+  const bool up = (u + v) > 0;
+  const double b = up ? -v : u, c = up ? -u : v;        // p = F(b) - F(c), b > c, b finite
+  double Fb, fb, Fc = 0.0, fc = 0.0;
+  if (link == 0) { logis_Ff(b, Fb, fb); if (c != R_NegInf) logis_Ff(c, Fc, fc); }
+  else { Fb = R::pnorm(b, 0.0, 1.0, 1, 0); fb = R::dnorm(b, 0.0, 1.0, 0);
+         if (c != R_NegInf) { Fc = R::pnorm(c, 0.0, 1.0, 1, 0); fc = R::dnorm(c, 0.0, 1.0, 0); } }
+  const double fu = up ? fc : fb, fv = up ? fb : fc;    // densities are symmetric
+  p = Fb - Fc;
+  if (p > 1e-250) {
+    rlo = fv / p; rhi = fu / p;
+    if (p > 1e-30) return true;
+    logp = std::log(p); return false;
+  }
+  const double lFb = logF_(b, link), lFc = (c == R_NegInf) ? R_NegInf : logF_(c, link);
+  double d = lFc - lFb; if (d > 0) d = 0;
+  logp = lFb + log1mexp_(d);
+  rlo = std::exp(logf_(v, link) - logp); rhi = std::exp(logf_(u, link) - logp);
+  return false;
+}
 
 // [[Rcpp::export]]
 List mofia_core_cpp(IntegerMatrix Y, NumericMatrix NU, NumericMatrix LAM, IntegerVector loadflag,
@@ -120,40 +156,17 @@ List mofia_core_cpp(IntegerMatrix Y, NumericMatrix NU, NumericMatrix LAM, Intege
         }
         int yy = y[i + (size_t)N * j];
         if (yy == NA_INTEGER) continue;
-        int K = toff[j + 1] - toff[j] + 1;
-        bool lo_inf = (yy == 0), hi_inf = (yy == K - 1);
-        double lo = lo_inf ? R_NegInf : tf[toff[j] + yy - 1];
-        double hi = hi_inf ? R_PosInf : tf[toff[j] + yy];
-        if (link == 0) {
-          // logit: with u = exp(a), F(hi - a) = ehi / (ehi + u), F(lo - a) = elo / (elo + u),
-          // p = u (ehi - elo) / ((ehi + u)(elo + u)); f(x) = F(x)(1 - F(x)). One exp per node.
-          double elo = lo_inf ? 0.0 : std::exp(lo), ehi = hi_inf ? 0.0 : std::exp(hi);
-          for (int q = 0; q < M; ++q) {
-            double a = nij; for (int d = 0; d < D; ++d) a += la[d] * E[q + (size_t)M * d];
-            if (a > 700.0) a = 700.0; else if (a < -700.0) a = -700.0;
-            double u = std::exp(a), p, flo = 0.0, fhi = 0.0;
-            if (lo_inf && hi_inf) p = 1.0;
-            else if (lo_inf)      { double dd = ehi + u; p = ehi / dd; fhi = ehi * u / (dd * dd); }
-            else if (hi_inf)      { double dd = elo + u; p = u / dd;   flo = elo * u / (dd * dd); }
-            else { double dh = ehi + u, dl = elo + u; p = u * (ehi - elo) / (dh * dl);
-                   fhi = ehi * u / (dh * dh); flo = elo * u / (dl * dl); }
-            if (!(p > 1e-300)) p = 1e-300;
+        const int K = toff[j + 1] - toff[j] + 1;
+        const double lo = (yy == 0) ? R_NegInf : tf[toff[j] + yy - 1];
+        const double hi = (yy == K - 1) ? R_PosInf : tf[toff[j] + yy];
+        for (int q = 0; q < M; ++q) {
+          double a = nij; for (int d = 0; d < D; ++d) a += la[d] * E[q + (size_t)M * d];
+          double p, logp, rlo, rhi;
+          if (cat_prob(hi - a, lo - a, link, p, logp, rlo, rhi)) {
             prodv[q] *= p;
             if (prodv[q] < 1e-250) { logL[q] += std::log(prodv[q]); prodv[q] = 1.0; }
-            if (want_scores) { gb[j * M + q] = (flo - fhi) / p; lob[j * M + q] = -flo / p; hib[j * M + q] = fhi / p; }
-          }
-        } else {
-          for (int q = 0; q < M; ++q) {
-            double a = nij; for (int d = 0; d < D; ++d) a += la[d] * E[q + (size_t)M * d];
-            double p = Fcdf(hi - a, link) - Fcdf(lo - a, link);
-            if (!(p > 1e-300)) p = 1e-300;
-            prodv[q] *= p;
-            if (prodv[q] < 1e-250) { logL[q] += std::log(prodv[q]); prodv[q] = 1.0; }
-            if (want_scores) {
-              double flo = fpdf(lo - a, link), fhi = fpdf(hi - a, link);
-              gb[j * M + q] = (flo - fhi) / p; lob[j * M + q] = -flo / p; hib[j * M + q] = fhi / p;
-            }
-          }
+          } else logL[q] += logp;
+          if (want_scores) { gb[j * M + q] = rlo - rhi; lob[j * M + q] = -rlo; hib[j * M + q] = rhi; }
         }
       }
       for (int q = 0; q < M; ++q) logL[q] += std::log(prodv[q]);

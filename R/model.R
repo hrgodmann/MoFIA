@@ -40,6 +40,32 @@
 #' `cor_mod` can be `TRUE`/`FALSE`, a character vector of moderators (applied
 #' to all factor pairs), or a logical pairs x moderators matrix.
 #'
+#' Matrices and arrays must have exactly the model's dimensions. If they carry
+#' dimension names (items, factors, moderators, factor pairs such as
+#' `"f1,f2"`), these must match the model's names and are used to align the
+#' entries; without names the entries are taken in the model's order. Nothing is
+#' recycled.
+#'
+#' @section Identification:
+#' Fixing the baseline factor mean and variance (or a marker loading) does not
+#' identify every moderation pattern. If a factor's mean and the
+#' thresholds/intercepts of *all* its items depend on the same moderator, a
+#' shift of the factor mean cannot be told apart from equal shifts of all
+#' items; likewise for the factor variance and *all* loadings. Keep at least
+#' one anchor item per factor and moderator whose parameters are not moderated.
+#' Patterns that are exactly unidentified are refused with an error; patterns
+#' identified only through the functional form of the moderation (for example,
+#' exponential variance against linear loadings for a continuous moderator)
+#' give a warning. [mofia()] additionally checks that the information matrix at
+#' the solution is positive definite. Which items are invariant is an
+#' assumption: choosing anchors from the same data (for example with
+#' [mofia_score_test()]) and then testing on those data is a form of
+#' post-selection inference.
+#'
+#' Cases without any observed item response are removed with a warning (they
+#' do not contribute to the likelihood). Cases with some observed responses
+#' contribute the likelihood of their observed items (missing at random).
+#'
 #' @section Parameter names:
 #' `tau[item,k]` thresholds; `nu0[item]` intercepts of continuous items;
 #' `lambda0[item,factor]` baseline loadings; `lambda1[item,factor,moderator]`
@@ -58,8 +84,12 @@
 #'   a one-sided formula such as `~ age + gender + age:gender + I(age^2)`. With a
 #'   formula, factor and character variables are dummy-coded (treatment
 #'   contrasts) and interactions and transformations are allowed; the resulting
-#'   model-matrix columns are the moderators. Cases with missing moderator
-#'   values are removed with a warning.
+#'   model-matrix columns are the moderators (a comma in a column name, as in
+#'   `poly(age, 2)1`, becomes a semicolon). Data-dependent transformations such
+#'   as `scale()` or `poly()` keep the values learned from the fitted data when
+#'   new data are predicted. Cases with missing moderator values are removed
+#'   with a warning; moderators must be finite, non-constant and not linearly
+#'   dependent.
 #' @param loadings Which items load on which factors: a measurement string in
 #'   lavaan style (`"f1 =~ y1 + y2 + y3; f2 =~ y4 + y5"`), a named list mapping
 #'   factor names to item names (e.g. `list(f1 = c("y1", "y2"), f2 = ...)`), or
@@ -107,7 +137,7 @@
 #'                   UB = c("SpiritsGhosts", "GnomesElves", "Aliens",
 #'                          "DevilPossession", "Sorcery", "HauntedPlaces")),
 #'   moderators = c("Age", "Male"),
-#'   threshold_mod = TRUE, cor_mod = TRUE)
+#'   threshold_mod = c("Dowsing", "DevilPossession"), cor_mod = TRUE)
 #' m
 #'
 #' # the same, with measurement syntax and a moderator formula
@@ -116,8 +146,13 @@
 #'                      MindReading + Willpower + SeeingFuture + SeeingEvents
 #'               UB =~ SpiritsGhosts + GnomesElves + Aliens + DevilPossession +
 #'                     Sorcery + HauntedPlaces",
-#'   moderators = ~ Age * Male, threshold_mod = TRUE, cor_mod = TRUE)
+#'   moderators = ~ Age * Male, threshold_mod = c("Dowsing", "DevilPossession"),
+#'   cor_mod = TRUE)
 #' m2$moderators
+#'
+#' # not identified: the factor means and all thresholds depend on Age and Male
+#' try(mofia_model(parabelief, loadings = list(UB = c("SpiritsGhosts", "Aliens",
+#'                 "Sorcery")), moderators = c("Age", "Male"), threshold_mod = TRUE))
 #' @export
 mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, factors = NULL,
                         loading_mod = NULL, threshold_mod = NULL,
@@ -131,14 +166,18 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
 
   # ---- moderators: columns or a formula; missing values; standardization ----
   des <- .moderator_design(data, moderators, standardize)
-  data <- des$data; moderators <- des$moderators
+  data <- des$data; moderators <- des$moderators; moddata <- des$raw
 
   # ---- items, factors and the loading pattern ----
   if (is.character(loadings) && length(loadings) == 1 && grepl("=~", loadings, fixed = TRUE))
     loadings <- .parse_loadings(loadings)
   if (is.list(loadings) && !is.data.frame(loadings)) {
     if (is.null(names(loadings)) || any(names(loadings) == "")) stop("'loadings' must be a named list (factor = items).")
+    if (anyDuplicated(names(loadings))) stop("Duplicated factor names in 'loadings'.")
     if (is.null(factors)) factors <- names(loadings)
+    bad <- setdiff(names(loadings), factors)
+    if (length(bad) || length(factors) != length(names(loadings)))
+      stop("'factors' must contain exactly the factor names of 'loadings'.")
     if (is.null(items)) items <- unique(unlist(loadings, use.names = FALSE))
     lp <- matrix(FALSE, length(items), length(factors), dimnames = list(items, factors))
     for (f in names(loadings)) {
@@ -147,27 +186,37 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
     }
     loadings <- lp
   }
+  if (is.null(items) && is.matrix(loadings) && !is.null(rownames(loadings))) items <- rownames(loadings)
   if (is.null(items)) stop("Give 'items', or 'loadings' as a named list.")
   items <- as.character(items)
-  if (is.null(factors)) factors <- if (is.null(loadings)) "eta" else (colnames(loadings) %||% paste0("f", seq_len(ncol(loadings))))
+  if (is.null(factors)) factors <- if (is.null(loadings)) "eta" else (colnames(loadings) %||% paste0("f", seq_len(ncol(as.matrix(loadings)))))
   P <- length(items); Q <- length(moderators); D <- length(factors)
   miss <- setdiff(c(items, moderators), names(data))
   if (length(miss)) stop("Not in the data: ", paste(miss, collapse = ", "))
   if (anyDuplicated(items)) stop("Duplicated item names.")
+  if (anyDuplicated(factors)) stop("Duplicated factor names.")
   if (is.null(loadings)) {
     if (D > 1) stop("Give the loading pattern ('loadings') for more than one factor.")
     loadings <- matrix(TRUE, P, 1)
   }
-  loadings <- matrix(as.logical(loadings), P, D, dimnames = list(items, factors))
+  loadings <- .named_logical(loadings, list(items, factors), c("items", "factors"), "loadings")
   if (any(rowSums(loadings) == 0)) stop("Item(s) without a loading: ", paste(items[rowSums(loadings) == 0], collapse = ", "))
 
   if (any(moderators %in% items)) stop("Items cannot also be moderators: ", paste(intersect(moderators, items), collapse = ", "))
 
+  # ---- cases without any observed item response carry no information ----
+  empty <- rowSums(!is.na(as.matrix(data[, items, drop = FALSE]))) == 0
+  if (any(empty)) {
+    warning(sum(empty), " case(s) without any observed item response removed (they carry no information).", call. = FALSE)
+    data <- data[!empty, , drop = FALSE]; moddata <- moddata[!empty, , drop = FALSE]
+  }
+  if (!nrow(data)) stop("No cases with observed item responses.")
+
   # ---- moderation patterns ----
   lm <- array(FALSE, c(P, D, Q), dimnames = list(items, factors, moderators))
   if (length(dim(loading_mod)) == 3) {
-    if (!all(dim(loading_mod) == c(P, D, Q))) stop("'loading_mod' array must be items x factors x moderators.")
-    lm[] <- as.logical(loading_mod)
+    lm[] <- .named_logical(loading_mod, list(items, factors, moderators), c("items", "factors", "moderators"),
+                           "loading_mod")
   } else {
     m2 <- .item_mod(loading_mod, items, moderators, "loading_mod")
     for (d in seq_len(D)) lm[, d, ] <- m2 & loadings[, d]
@@ -199,14 +248,16 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
   pairs <- if (D >= 2) t(utils::combn(D, 2)) else matrix(integer(0), 0, 2)
   npair <- nrow(pairs)
   cmat <- matrix(FALSE, npair, Q, dimnames = list(if (npair) paste(factors[pairs[, 1]], factors[pairs[, 2]], sep = ",") else NULL, moderators))
-  if (npair && !is.null(cor_mod) && !identical(cor_mod, FALSE)) {
+  if (npair && Q && !is.null(cor_mod) && !identical(cor_mod, FALSE)) {
     if (isTRUE(cor_mod)) cmat[] <- TRUE
     else if (is.character(cor_mod)) {
       bad <- setdiff(cor_mod, moderators); if (length(bad)) stop("Unknown moderator(s) in cor_mod: ", paste(bad, collapse = ", "))
       cmat[, cor_mod] <- TRUE
-    } else if (is.null(dim(cor_mod))) cmat[] <- matrix(rep_len(as.logical(cor_mod), Q), npair, Q, byrow = TRUE)
-    else cmat[] <- as.logical(cor_mod)
-  }
+    } else if (is.null(dim(cor_mod))) {
+      cmat[] <- matrix(.per_moderator(cor_mod, moderators, "cor_mod"), npair, Q, byrow = TRUE)
+    } else cmat[] <- .named_logical(cor_mod, dimnames(cmat), c("factor pairs", "moderators"), "cor_mod")
+  } else if (!npair && is.character(cor_mod) && length(cor_mod))
+    stop("'cor_mod' needs at least two factors.")
   cor_mod <- cmat
   if (D >= 3 && any(cor_mod) && !isTRUE(experimental_cor))
     stop("Moderated factor correlations with 3 or more factors are not methodologically established ",
@@ -244,6 +295,8 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
     warning("Categories with fewer than ", sparse, " responses: ", paste(sparse_items, collapse = "; "),
             ". Estimates of their thresholds can be unstable; see mofia_collapse().", call. = FALSE)
   X <- matrix(as.numeric(as.matrix(data[, moderators, drop = FALSE])), nrow(data), Q, dimnames = list(NULL, moderators))
+  .check_moderators(X)
+  .check_identification(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param)
 
   # ---- parameter table ----
   rows <- list()
@@ -285,8 +338,108 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
                  loading_mod = lm, threshold_mod = tm, mean_mod = mean_mod, var_mod = var_mod,
                  cor_mod = cor_mod, pairs = pairs, npair = npair, cov_param = cov_param,
                  identification = identification, markers = mk_idx, cont = cont, resvar_mod = rm_,
-                 experimental_cor = isTRUE(experimental_cor), design = des$design, par = pt),
+                 experimental_cor = isTRUE(experimental_cor), design = des$design, moddata = moddata, par = pt),
             class = "mofia_model")
+}
+
+# ---- input validation ------------------------------------------------------------
+# A logical array with the given dimension names. Named inputs must carry exactly
+# these names on every axis (in any order) and are reordered; unnamed inputs must
+# have exactly the right dimensions. Nothing is recycled.
+.named_logical <- function(x, dn, axes, what) {
+  x <- if (is.null(dim(x)) && length(dn) == 2) as.matrix(x) else x
+  if (is.data.frame(x)) x <- as.matrix(x)
+  d <- dim(x); target <- lengths(dn)
+  if (length(d) != length(target) || any(d != target))
+    stop(sprintf("'%s' must be a %s array/matrix (%s); got dimensions %s.", what, paste(axes, collapse = " x "),
+                 paste(target, collapse = " x "), paste(d, collapse = " x ")), call. = FALSE)
+  xdn <- dimnames(x)
+  if (!is.null(xdn)) for (k in seq_along(dn)) {
+    nk <- xdn[[k]]
+    if (is.null(nk)) next
+    if (anyDuplicated(nk) || !setequal(nk, dn[[k]]) || length(nk) != length(dn[[k]]))
+      stop(sprintf("The %s names of '%s' do not match the model's %s: %s.", sub("s$", "", axes[k]), what, axes[k],
+                   paste(dn[[k]], collapse = ", ")), call. = FALSE)
+  }
+  if (!is.null(xdn)) {
+    idx <- lapply(seq_along(dn), function(k) if (is.null(xdn[[k]])) seq_along(dn[[k]]) else match(dn[[k]], xdn[[k]]))
+    x <- do.call(`[`, c(list(x), idx, list(drop = FALSE)))
+  }
+  v <- as.vector(x)
+  if (is.numeric(v) && all(v %in% c(0, 1))) v <- v == 1
+  if (!is.logical(v) || anyNA(v)) stop("'", what, "' must contain only TRUE/FALSE (or 0/1).", call. = FALSE)
+  array(v, target, dimnames = dn)
+}
+
+# a per-moderator logical vector: length 1, or one value per moderator (by name if named)
+.per_moderator <- function(x, moderators, what) {
+  if (!is.logical(x) || anyNA(x)) stop("'", what, "' must be TRUE/FALSE, moderator names, a named list or a matrix.", call. = FALSE)
+  if (length(x) == 1) return(rep(x, length(moderators)))
+  if (length(x) != length(moderators))
+    stop("A logical '", what, "' vector needs one value per moderator (", length(moderators), ").", call. = FALSE)
+  if (!is.null(names(x))) {
+    if (!setequal(names(x), moderators)) stop("The names of '", what, "' do not match the moderators.", call. = FALSE)
+    x <- x[moderators]
+  }
+  unname(x)
+}
+
+.check_moderators <- function(X) {
+  if (!ncol(X)) return(invisible())
+  nf <- colnames(X)[colSums(!is.finite(X)) > 0]
+  if (length(nf)) stop("Moderators must be finite numbers; not finite in: ", paste(nf, collapse = ", "), call. = FALSE)
+  const <- colnames(X)[apply(X, 2, function(v) max(v) - min(v) == 0)]
+  if (length(const)) stop("Constant moderator(s) (no variation in the data): ", paste(const, collapse = ", "), call. = FALSE)
+  q <- qr(cbind(1, X))
+  if (q$rank < ncol(X) + 1) {
+    dep <- colnames(X)[q$pivot[(q$rank + 1):(ncol(X) + 1)] - 1]
+    stop("The moderators are linearly dependent (together with the intercept); remove: ",
+         paste(dep[dep != ""], collapse = ", "), call. = FALSE)
+  }
+  invisible()
+}
+
+# Identification of the moderation effects. Fixing the baseline factor mean and
+# variance (or a marker loading) does not identify every moderation pattern:
+#  * mean / DIF: if the factor mean and the thresholds/intercepts of all items of
+#    the factor depend on the same moderator, a shift of the factor mean equals
+#    equal shifts of all items (exactly so when no loading of the factor is moderated);
+#  * scale: if the factor variance and all loadings of the factor depend on the same
+#    moderator, a larger factor SD equals smaller loadings (exactly so for a binary
+#    moderator when nothing else on the factor is moderated; for a continuous moderator
+#    the model is identified only through the different functional forms, exp() vs
+#    linear).
+# Exactly unidentified patterns are errors, functional-form-only ones warnings. At
+# least one anchor item per factor and moderator avoids both.
+.check_identification <- function(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param) {
+  D <- ncol(loadings); Q <- ncol(X); if (!Q) return(invisible())
+  items <- rownames(loadings); factors <- colnames(loadings); mods <- colnames(X)
+  binary <- apply(X, 2, function(v) length(unique(v)) == 2)
+  errs <- warns <- character(0)
+  for (d in seq_len(D)) {
+    on_d <- which(loadings[, d])
+    any_lm_d <- any(lm[on_d, d, ])
+    for (q in seq_len(Q)) {
+      if (mean_mod[d, q] && all(tm[on_d, q])) {
+        msg <- sprintf("the mean of factor '%s' and the thresholds/intercepts of all its items depend on '%s'", factors[d], mods[q])
+        if (!any_lm_d) errs <- c(errs, msg) else warns <- c(warns, msg)
+      }
+      if (var_mod[d, q] && all(lm[on_d, d, q])) {
+        msg <- sprintf("the variance of factor '%s' and the loadings of all its items depend on '%s'", factors[d], mods[q])
+        exact <- binary[q] && !any(lm[on_d, d, -q]) && !any(mean_mod[d, -q]) && (D == 1 || cov_param == "fisherz")
+        if (exact) errs <- c(errs, msg) else warns <- c(warns, msg)
+      }
+    }
+  }
+  if (length(errs))
+    stop("The model is not identified: ", paste(errs, collapse = "; "), ". Keep at least one anchor item per ",
+         "factor whose parameters do not depend on that moderator, or drop the factor-level moderation ",
+         "(mean_mod / var_mod).", call. = FALSE)
+  if (length(warns))
+    warning("Possibly not identified: ", paste(warns, collapse = "; "), ". Without an anchor item the model is ",
+            "identified only through the functional form of the moderation (if at all); estimates can be unstable ",
+            "and depend on that assumption. Consider keeping an anchor item.", call. = FALSE)
+  invisible()
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
@@ -300,19 +453,21 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
     bad <- setdiff(x, items); if (length(bad)) stop("Unknown item(s) in ", what, ": ", paste(bad, collapse = ", "))
     m[x, ] <- TRUE; return(m)
   }
-  if (is.list(x)) {
+  if (is.list(x) && !is.data.frame(x)) {
+    if (length(x) && (is.null(names(x)) || any(names(x) == "")))
+      stop("'", what, "' given as a list must be named (item = moderators).", call. = FALSE)
     for (r in names(x)) {
       if (!r %in% items) stop("Unknown item in ", what, ": ", r)
+      if (is.null(x[[r]]) || identical(x[[r]], FALSE)) next
       mods <- if (isTRUE(x[[r]])) moderators else x[[r]]
+      if (!is.character(mods)) stop("Entries of '", what, "' must be moderator names or TRUE: ", r, call. = FALSE)
       bad <- setdiff(mods, moderators); if (length(bad)) stop("Unknown moderator(s) in ", what, ": ", paste(bad, collapse = ", "))
       m[r, mods] <- TRUE
     }
     return(m)
   }
-  x <- as.matrix(x)
-  if (!all(dim(x) == dim(m))) stop("'", what, "' must be an items x moderators matrix.")
-  if (!is.null(rownames(x)) && all(items %in% rownames(x))) x <- x[items, , drop = FALSE]
-  m[] <- as.logical(x); m
+  if (is.logical(x) && is.null(dim(x)) && length(x) == 1) { m[] <- x; return(m) }
+  .named_logical(x, dimnames(m), c("items", "moderators"), what)
 }
 
 # factors x moderators logical matrix
@@ -324,16 +479,24 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
     bad <- setdiff(x, moderators); if (length(bad)) stop("Unknown moderator(s) in ", what, ": ", paste(bad, collapse = ", "))
     m[, x] <- TRUE; return(m)
   }
-  if (is.list(x)) {
+  if (is.list(x) && !is.data.frame(x)) {
+    if (length(x) && (is.null(names(x)) || any(names(x) == "")))
+      stop("'", what, "' given as a list must be named (factor = moderators).", call. = FALSE)
     for (f in names(x)) {
       if (!f %in% factors) stop("Unknown factor in ", what, ": ", f)
+      if (is.null(x[[f]]) || identical(x[[f]], FALSE)) next
       mods <- if (isTRUE(x[[f]])) moderators else x[[f]]
+      if (!is.character(mods)) stop("Entries of '", what, "' must be moderator names or TRUE: ", f, call. = FALSE)
+      bad <- setdiff(mods, moderators); if (length(bad)) stop("Unknown moderator(s) in ", what, ": ", paste(bad, collapse = ", "))
       m[f, mods] <- TRUE
     }
     return(m)
   }
-  if (is.null(dim(x))) { m[] <- matrix(rep_len(as.logical(x), length(moderators)), length(factors), length(moderators), byrow = TRUE); return(m) }
-  m[] <- as.logical(as.matrix(x)); m
+  if (is.null(dim(x))) {
+    m[] <- matrix(.per_moderator(x, moderators, what), length(factors), length(moderators), byrow = TRUE)
+    return(m)
+  }
+  .named_logical(x, dimnames(m), c("factors", "moderators"), what)
 }
 
 # ---- moderators: columns or a one-sided formula -------------------------------------
@@ -354,7 +517,11 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
       warning(sum(nax), " case(s) with missing moderator values removed.", call. = FALSE)
       data <- data[!nax, , drop = FALSE]
     }
+    nf <- vars[vapply(vars, function(v) is.numeric(data[[v]]) && any(!is.finite(data[[v]])), TRUE)]
+    if (length(nf)) stop("Moderators must be finite numbers; not finite in: ", paste(nf, collapse = ", "), call. = FALSE)
   }
+  raw <- data[, vars, drop = FALSE]                    # moderator variables on their original scale
+  rownames(raw) <- NULL
   # description of each raw variable (on its original scale), used for plots and new data
   info <- lapply(vars, function(v) {
     x <- data[[v]]
@@ -379,20 +546,23 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
       stop("Moderator '", q, "' is not numeric. Give the moderators as a formula (e.g. ~ ", q,
            ") to dummy-code it automatically.")
     for (q in vars) data[[q]] <- as.numeric(data[[q]])
-    return(list(data = data, moderators = vars,
+    return(list(data = data, moderators = vars, raw = raw,
                 design = list(type = "columns", vars = vars, info = info, scaling = scaling)))
   }
   tt <- stats::terms(moderators)
   if (attr(tt, "intercept") == 0) stop("The moderator formula must keep the intercept (do not use '- 1' or '+ 0').")
   if (!length(attr(tt, "term.labels"))) stop("The moderator formula has no terms.")
   mf <- stats::model.frame(tt, data, na.action = stats::na.pass)
+  # the model frame's terms carry 'predvars': data-dependent transformations such as
+  # scale() or poly() are re-applied to new data with the training values
+  tt <- stats::terms(mf)
   mm <- stats::model.matrix(tt, mf)
   xlev <- stats::.getXlevels(tt, mf); contr <- attr(mm, "contrasts")
   mm <- mm[, colnames(mm) != "(Intercept)", drop = FALSE]
-  mods <- colnames(mm)
-  if (any(grepl(",", mods, fixed = TRUE))) stop("Moderator terms must not contain commas: ", paste(mods[grepl(",", mods)], collapse = ", "))
-  for (m in mods) data[[m]] <- unname(mm[, m])
-  list(data = data, moderators = mods,
+  # commas separate the indices in parameter names; terms such as poly(x, 2) get ';'
+  mods <- gsub(",[[:space:]]*", "; ", colnames(mm))
+  for (k in seq_along(mods)) data[[mods[k]]] <- unname(mm[, k])
+  list(data = data, moderators = mods, raw = raw,
        design = list(type = "formula", formula = moderators, terms = tt, xlevels = xlev, contrasts = contr,
                      vars = vars, info = info, scaling = scaling))
 }
@@ -485,7 +655,7 @@ mofia_drop <- function(model, drop) {
                continuous = model$items[model$cont], resvar_mod = model$resvar_mod,
                experimental_cor = model$experimental_cor, sparse = 0)
   new <- suppressWarnings(do.call(mofia_model, utils::modifyList(args, list(...))))
-  new$design <- model$design
+  new$design <- model$design; new$moddata <- model$moddata
   new
 }
 

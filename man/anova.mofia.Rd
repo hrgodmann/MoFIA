@@ -17,8 +17,8 @@
 \item{scaled}{Use the scaled difference test? If \code{FALSE}, the ordinary
 likelihood-ratio test is reported.}
 
-\item{information}{\code{"default"}, \code{"reduced"} or \code{"exact"} information for the
-scaling factors; see \code{\link[=mofia]{mofia()}}.}
+\item{information}{\code{"default"} (exact), \code{"reduced"} or \code{"exact"} information
+for the scaling factors; see \code{\link[=mofia]{mofia()}}.}
 }
 \value{
 A data frame of class \code{anova} with one row per model.
@@ -29,10 +29,14 @@ Satorra-Bentler (2001) scaling correction for the robust (MLR) estimator.
 Models are sorted by their number of parameters and compared in sequence.
 }
 \details{
-Nesting is checked by parameter names: every parameter of the
-smaller model must also be in the larger one. Models that fail this check
-are still compared, with a warning, because some models are nested in a
-way the names cannot show; the test is only valid for truly nested models.
+All models must be fitted to the same cases and item responses
+with the same link and must have converged; see \code{\link[=mofia_lrt]{mofia_lrt()}}. Nesting is
+checked by parameter names: every parameter of the smaller model must also
+be in the larger one. Models that fail this check are still compared, with
+a warning, because some models are nested in a way the names cannot show
+(e.g. marker vs variance identification); the test is only valid for truly
+nested models. A pair whose larger model has a clearly lower
+log-likelihood gets no test and a warning.
 The scaled test can be negative-definite in small samples (scaling
 factor below 0); the p-value is then \code{NA} and \code{\link[=mofia_lrt]{mofia_lrt()}} with
 \code{sb2010 = TRUE} gives a strictly positive alternative.

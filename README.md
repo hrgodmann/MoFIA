@@ -15,11 +15,14 @@ a common scale.
 * Moderation of loadings, thresholds/intercepts, residual variances, factor
   means, factor variances and factor correlations (Fisher-z or linear
   covariance).
-* One or more factors; variance or marker-item identification; missing item
-  responses (full information).
+* One or more factors (the cost of the quadrature grows exponentially with the
+  number of factors; accuracy has been checked for up to three); variance or
+  marker-item identification; missing item responses (full information,
+  assuming missingness at random).
 * Marginal maximum likelihood with adaptive Gauss-Hermite quadrature and
   analytic gradients in C++ (multithreaded with OpenMP where available).
-* ML, robust (MLR, sandwich) and score-based (MLF) standard errors.
+* ML, robust (MLR, sandwich with the exact observed information) and
+  score-based (MLF) standard errors.
 * Scaled likelihood-ratio tests (Satorra-Bentler), Wald tests, and score
   (Lagrange multiplier) tests that screen all items for DIF from one fit.
 * Model syntax (`"f1 =~ y1 + y2"`) and moderator formulas with factors,
@@ -27,7 +30,10 @@ a common scale.
 * EAP factor scores, model-implied predictions, confidence intervals, broom-style
   `tidy()`/`glance()`, and plots of moderated parameters and item response
   functions.
-* Random starts, warnings for sparse categories and a helper to collapse them.
+* Safeguards: unidentified moderation patterns are refused, saddle points and
+  singular information matrices are reported instead of standard errors,
+  likelihood-ratio tests check that the models are comparable; random starts,
+  warnings for sparse categories and a helper to collapse them.
 * Simulation of data from any model.
 
 ## Installation

@@ -10,21 +10,30 @@
 #' @section Standard errors:
 #' Three kinds are computed: `"ML"` (inverse observed information), `"MLR"`
 #' (robust sandwich, the default in [summary.mofia()]) and `"MLF"` (outer
-#' product of the per-person scores). ML and MLR use one of two versions of the
-#' observed information. `"exact"` is the full Hessian of the log-likelihood.
-#' `"reduced"` omits the term that involves the second derivatives of the
-#' nonlinear parameter transformations (log-linear factor and residual
-#' variances, Fisher-z correlations); this term has expectation zero at the
-#' true parameters, so both versions are consistent. By default
-#' (`information = "default"`), models with categorical items use the reduced
-#' and models with only continuous items the exact information. In simulations
-#' both gave close to nominal coverage; the reduced version was slightly less
-#' biased for factor-variance moderation.
+#' product of the per-person scores, valid only for a correctly specified
+#' model). ML and MLR use the observed information, by default the full
+#' Hessian of the log-likelihood (`information = "exact"`). This is the
+#' derivative of the estimating equations, which the sandwich needs to be
+#' robust to misspecification.
+#'
+#' `information = "reduced"` is available for comparison with software that
+#' differentiates through the person-level parameters only: it omits the term
+#' with the second derivatives of the nonlinear parameter transformations
+#' (log-linear factor and residual variances, Fisher-z correlations). That term
+#' has expectation zero when the model is correctly specified, so reduced ML
+#' standard errors are consistent then. Under misspecification it does not
+#' vanish, and reduced MLR standard errors and scaling factors are not robust;
+#' use them only as a correct-specification check.
 #'
 #' @section Convergence:
-#' Convergence is judged by the Newton decrement, the log-likelihood gain still
-#' available from one more Newton step (\eqn{g'A^{-1}g/2}); the fit counts as
-#' converged when it is below `1e-6`.
+#' A fit counts as converged when the information matrix at the solution is
+#' positive definite (the solution is a maximum, not a saddle point, and the
+#' model is identified by the data) and the Newton decrement, the
+#' log-likelihood gain still available from one more Newton step
+#' (\eqn{g'A^{-1}g/2}), is below `1e-6`. If the information matrix is not
+#' positive definite, the fit is marked as not converged, `status` is
+#' `"saddle"` or `"singular"`, and standard errors and tests are not reported.
+#' With `se = FALSE` only the gradient is checked.
 #'
 #' @param model A `mofia_model` from [mofia_model()].
 #' @param link `"logit"` (default) or `"probit"` for categorical items.
@@ -43,9 +52,11 @@
 #'   available). Default: `getOption("mofia.threads", 1)`.
 #'
 #' @return An object of class `mofia` with components including
-#'   `coefficients`, `loglik`, `npar`, `nobs`, `converged`,
-#'   `newton_decrement`, `vcov` (a list of covariance matrices), `scaling`
-#'   (robust scaling correction factors), `model`, `link` and `nq`.
+#'   `coefficients`, `loglik`, `npar`, `nobs`, `converged`, `status` (`"ok"`,
+#'   `"saddle"` or `"singular"`), `information_eigen` (smallest and largest
+#'   eigenvalue of the information matrix), `newton_decrement`, `vcov` (a list
+#'   of covariance matrices), `scaling` (robust scaling correction factors),
+#'   `model`, `link` and `nq`.
 #' @seealso [mofia_model()], [summary.mofia()], [anova.mofia()],
 #'   [mofia_wald()], [mofia_simulate()]
 #' @references
@@ -108,7 +119,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
               model = model, call = call)
   class(fit) <- "mofia"
   if (se) fit <- .mofia_se(fit)
-  if (!isTRUE(fit$converged))
+  if (!isTRUE(fit$converged) && identical(fit$status %||% "ok", "ok"))
     warning("The model may not have converged (max |gradient| = ", signif(fit$max_abs_grad, 3),
             if (is.finite(fit$newton_decrement)) paste0(", Newton decrement = ", signif(fit$newton_decrement, 3)), ").",
             call. = FALSE)
@@ -162,7 +173,11 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
 }
 
 # ---- standard errors -----------------------------------------------------------
-.mofia_se <- function(fit) {
+# Relative eigenvalue threshold below which the information matrix counts as
+# singular (min eigenvalue / max eigenvalue); negative beyond it: saddle point.
+.pd_tol <- 1e-8
+
+.mofia_se <- function(fit, check = TRUE) {
   model <- fit$model; theta <- fit$coefficients; link <- fit$link; adapt <- fit$adapt
   nodes <- .mofia_nodes(fit$nq, model$D)
   ll <- .mofia_ll(theta, model, link, nodes, scores = TRUE, adapt = adapt)
@@ -177,24 +192,43 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   H <- (H + t(H)) / 2
   dn <- list(names(theta), names(theta))
   B <- crossprod(S); dimnames(B) <- dn
-  inv <- function(A) tryCatch({ V <- solve(A); dimnames(V) <- dn; V }, error = function(e) NULL)
-  A_exact <- inv(-H)
+  I_exact <- -H
   W <- attr(ll, "phi_scores"); attr(W, "resvar") <- attr(ll, "resvar_scores")
-  A_red <- inv(-H + .constraint_curvature(theta, model, W))
-  if (is.null(A_exact) || is.null(A_red)) {
-    warning("The information matrix is not invertible; standard errors are not available ",
-            "(the model may not be identified).", call. = FALSE)
+  I_red <- -H + .constraint_curvature(theta, model, W)
+  g <- colSums(S)
+
+  # curvature: a maximum needs a positive-definite information matrix
+  ev <- if (all(is.finite(I_exact))) eigen(I_exact, symmetric = TRUE, only.values = TRUE)$values else NA_real_
+  fit$information_eigen <- c(min = min(ev), max = max(ev))
+  pd <- all(is.finite(ev)) && min(ev) > .pd_tol * max(abs(ev))
+  fit$status <- if (pd) "ok" else if (all(is.finite(ev)) && min(ev) < -.pd_tol * max(abs(ev))) "saddle" else "singular"
+  if (check && !pd) {
+    fit$converged <- FALSE; fit$vcov <- NULL; fit$scaling <- NULL; fit$newton_decrement <- NA_real_
+    fit$se_note <- if (fit$status == "saddle")
+      sprintf("the solution is a saddle point, not a maximum (smallest information eigenvalue %.3g)", min(ev))
+    else sprintf("the information matrix is singular (smallest eigenvalue %.3g, largest %.3g): the model is not identified, or not identified by these data",
+                 min(ev), max(ev))
+    warning("Standard errors and tests are not available: ", fit$se_note, ". ",
+            if (fit$status == "saddle") "Try other starting values (starts > 1)." else "Check the anchor items.",
+            call. = FALSE)
     return(fit)
   }
-  sandwich <- function(Ai) Ai %*% B %*% Ai
+
+  inv_pd <- function(I) {
+    e <- eigen(I, symmetric = TRUE)
+    if (!all(is.finite(e$values)) || min(e$values) <= .pd_tol * max(abs(e$values))) return(NULL)
+    V <- e$vectors %*% (t(e$vectors) / e$values); V <- (V + t(V)) / 2; dimnames(V) <- dn; V
+  }
+  sandwich <- function(Ai) if (is.null(Ai)) NULL else { V <- Ai %*% B %*% Ai; (V + t(V)) / 2 }
+  A_exact <- inv_pd(I_exact); A_red <- inv_pd(I_red)
   fit$vcov <- list(exact = list(ML = A_exact, MLR = sandwich(A_exact)),
-                   reduced = list(ML = A_red, MLR = sandwich(A_red)),
-                   MLF = inv(B))
-  fit$scaling <- c(exact = sum(diag(A_exact %*% B)) / np, reduced = sum(diag(A_red %*% B)) / np)
-  fit$information <- if (all(model$cont)) "exact" else "reduced"
-  g <- colSums(S)
-  fit$newton_decrement <- 0.5 * sum(g * (A_exact %*% g))
-  fit$converged <- fit$newton_decrement < 1e-6
+                   reduced = if (is.null(A_red)) NULL else list(ML = A_red, MLR = sandwich(A_red)),
+                   MLF = inv_pd(B))
+  fit$scaling <- c(exact = if (is.null(A_exact)) NA_real_ else sum(diag(A_exact %*% B)) / np,
+                   reduced = if (is.null(A_red)) NA_real_ else sum(diag(A_red %*% B)) / np)
+  fit$information <- "exact"
+  fit$newton_decrement <- if (is.null(A_exact)) NA_real_ else 0.5 * sum(g * (A_exact %*% g))
+  fit$converged <- pd && is.finite(fit$newton_decrement) && fit$newton_decrement < 1e-6
   fit
 }
 

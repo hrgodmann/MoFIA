@@ -17,6 +17,6 @@ sim_two_factor <- function(N = 400, seed = 1, continuous = FALSE) {
   th[c("delta[f1,x1]", "delta[f1,x2]", "delta[f2,x1]", "delta[f2,x2]")] <- c(0.2, 0.1, -0.2, 0.1)
   th[c("zcor0[f1,f2]", "zcor1[f1,f2,x1]", "zcor1[f1,f2,x2]")] <- c(0.4, 0.2, -0.1)
   if (continuous) th[c("nu0[y6]", "omega0[y6]", "omega[y6,x1]")] <- c(0.5, log(0.6), 0.3)
-  dat <- mofia_simulate(m0, th, X, seed = seed + 1)
+  dat <- mofia_simulate(m0, th, newdata = X, seed = seed + 1)
   list(data = dat, theta = th, args = args)
 }

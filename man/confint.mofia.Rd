@@ -25,7 +25,8 @@
 \item{...}{Not used.}
 }
 \value{
-A matrix with lower and upper limits.
+A matrix with lower and upper limits (\code{NA} where the standard error
+is not available).
 }
 \description{
 Wald intervals based on the chosen standard errors.

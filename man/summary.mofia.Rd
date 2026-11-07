@@ -16,13 +16,15 @@
 
 \item{se}{Standard-error type: \code{"MLR"} (default), \code{"ML"} or \code{"MLF"}.}
 
-\item{information}{\code{"default"}, \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
+\item{information}{\code{"default"} (exact), \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
 
 \item{...}{Not used.}
 }
 \value{
 An object of class \code{summary.mofia}; its \code{coefficients} element is a
-data frame with columns \code{estimate}, \code{se}, \code{z}, \code{p} and \code{type}.
+data frame with columns \code{estimate}, \code{se}, \code{z}, \code{p} and \code{type}. Standard
+errors that are not available (no positive-definite information matrix, or
+a non-positive variance) are \code{NA}, as are their z statistics and p-values.
 }
 \description{
 Parameter estimates with standard errors, z statistics and p-values,

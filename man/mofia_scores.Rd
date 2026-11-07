@@ -18,7 +18,9 @@ attribute \code{"cov"} (persons x factors x factors).
 \description{
 Expected a posteriori (EAP) factor scores: the posterior mean of each
 person's factor values given their responses and moderator values, with the
-posterior standard deviation as its standard error. Scores are on the scale
+posterior standard deviation as its standard error. The posterior is taken
+at the estimated parameters, so the SD does not include the uncertainty of
+the parameter estimates. Scores are on the scale
 of the model's factors (mean 0 and variance 1 for a person with all
 moderators at 0, under variance identification), so they include the
 moderated factor means and variances.

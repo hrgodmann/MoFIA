@@ -8,6 +8,22 @@
   else                 list(F = stats::pnorm,  f = stats::dnorm,  name = "probit")
 }
 
+# Category probability p = F(u) - F(v) (u > v) on the log scale, with the ratios
+# f(v)/p and f(u)/p, evaluated without cancellation: when the interval lies mostly
+# in the upper half, p = F(-v) - F(-u); log F and log(1 - exp(.)) keep the tails
+# accurate. u = +Inf or v = -Inf mark the open end of the first/last category.
+.log1mexp <- function(x) ifelse(x > -log(2), log(-expm1(x)), log1p(-exp(x)))
+.cat_logp <- function(u, v, link) {
+  lF <- if (link == "logit") function(x) stats::plogis(x, log.p = TRUE) else function(x) stats::pnorm(x, log.p = TRUE)
+  lf <- if (link == "logit") function(x) stats::dlogis(x, log = TRUE) else function(x) stats::dnorm(x, log = TRUE)
+  up <- (u + v) > 0
+  b <- ifelse(up, -v, u); c <- ifelse(up, -u, v)
+  lFb <- lF(b); lFc <- lF(c)
+  logp <- lFb + .log1mexp(pmin(lFc - lFb, 0))
+  logp[is.nan(logp)] <- -Inf
+  list(logp = logp, rlo = exp(lf(v) - logp), rhi = exp(lf(u) - logp))
+}
+
 # product Gauss-Hermite rule for N(0, I_D)
 .mofia_nodes <- function(nq = 31, D = 1) {
   gq <- statmod::gauss.quad.prob(nq, dist = "normal")
@@ -37,7 +53,6 @@
                             scores = FALSE, per_person = FALSE, adapt = NULL, return_post = FALSE) {
   if (spec$D > 2) stop("The R reference engine supports 1 or 2 factors; use the C++ engine.")
   if (!is.null(adapt) && is.null(adapt$L11)) adapt <- .adapt_compat(adapt, spec$D)
-  lf <- .link_funs(link); Fc <- lf$F; fd <- lf$f
   pr <- .unpack(theta, spec); X <- spec$X; Y <- spec$Y
   N <- spec$N; P <- spec$P; D <- spec$D; M <- nrow(nodes$T)
   for (j in seq_len(P)) if (is.unsorted(pr$tau[[j]], strictly = TRUE)) return(-Inf)
@@ -83,9 +98,10 @@
     te <- c(-Inf, pr$tau[[j]], Inf)
     y <- Y[, j]; obs <- !is.na(y); yy <- ifelse(obs, y, 0L)
     lo <- te[yy + 1]; hi <- te[yy + 2]
-    p <- Fc(hi - a) - Fc(lo - a); p[!obs, ] <- 1; p <- pmax(p, 1e-300)
-    logLq <- logLq + log(p)
-    if (scores) keep[[j]] <- list(lam = lam, a = a, lo = lo, hi = hi, p = p, obs = obs, yy = yy)
+    cp <- .cat_logp(hi - a, lo - a, link)
+    lp <- cp$logp; lp[!obs, ] <- 0
+    logLq <- logLq + lp
+    if (scores) keep[[j]] <- list(lam = lam, rlo = cp$rlo, rhi = cp$rhi, obs = obs, yy = yy)
   }
   lw <- logLq + LW
   mx <- apply(lw, 1, max); lli <- mx + log(rowSums(exp(lw - mx)))
@@ -125,8 +141,7 @@
       for (c in which(pt$block == "omega" & pt$item == j)) S[, c] <- X[, pt$mod[c]] * PH[, j]
       next
     }
-    flo <- fd(k$lo - k$a); fhi <- fd(k$hi - k$a)
-    g <- (flo - fhi) / k$p; g[!k$obs, ] <- 0
+    g <- k$rlo - k$rhi; g[!k$obs, ] <- 0
     pg <- rowSums(post * g)
     for (d in seq_len(D)) if (spec$loadings[j, d]) {
       pge <- rowSums(post * g * E[[d]])
@@ -135,7 +150,7 @@
       A[[d]] <- A[[d]] + k$lam[[d]] * g
     }
     for (c in which(pt$block == "beta" & pt$item == j)) S[, c] <- X[, pt$mod[c]] * pg
-    dlo <- rowSums(post * (-flo / k$p)); dhi <- rowSums(post * (fhi / k$p))
+    dlo <- rowSums(post * (-k$rlo)); dhi <- rowSums(post * k$rhi)
     dlo[!k$obs] <- 0; dhi[!k$obs] <- 0
     tcols <- which(pt$block == "tau" & pt$item == j)
     for (kk in seq_along(tcols)) S[, tcols[kk]] <- ifelse(k$yy == kk, dlo, 0) + ifelse(k$yy + 1 == kk, dhi, 0)

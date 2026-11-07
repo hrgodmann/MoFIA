@@ -4,7 +4,9 @@
 #'
 #' Expected a posteriori (EAP) factor scores: the posterior mean of each
 #' person's factor values given their responses and moderator values, with the
-#' posterior standard deviation as its standard error. Scores are on the scale
+#' posterior standard deviation as its standard error. The posterior is taken
+#' at the estimated parameters, so the SD does not include the uncertainty of
+#' the parameter estimates. Scores are on the scale
 #' of the model's factors (mean 0 and variance 1 for a person with all
 #' moderators at 0, under variance identification), so they include the
 #' moderated factor means and variances.
@@ -59,11 +61,19 @@ mofia_scores <- function(object) {
   list(pr = pr, eta = eta, w = exp(nodes$logw))
 }
 
-# category probabilities of item j given a matrix of linear predictors (persons x nodes)
+# category probabilities of item j given a matrix of linear predictors (persons x nodes):
+# P(y = k) = F(A - tau_{k-1}) - F(A - tau_k), evaluated in the tail where the
+# difference does not cancel (1 - F(c) - (1 - F(b)) = F(-c) - F(-b) in the upper half)
 .cat_probs <- function(A, tau, link) {
   Fc <- .link_funs(link)$F
-  cum <- c(list(1), lapply(tau, function(t) Fc(A - t)), list(0))          # P(y >= k)
-  lapply(seq_len(length(tau) + 1), function(k) cum[[k]] - cum[[k + 1]])
+  te <- c(-Inf, tau, Inf)
+  lapply(seq_len(length(tau) + 1), function(k) {
+    b <- A - te[k]; c <- A - te[k + 1]
+    up <- (b + c) > 0
+    out <- Fc(b) - Fc(c)
+    out[up] <- Fc(-c[up]) - Fc(-b[up])
+    out
+  })
 }
 
 # linear predictor of item j at the given factor values (list of matrices)
@@ -143,13 +153,14 @@ fitted.mofia <- function(object, ...) predict.mofia(object, type = "expected")
 #' @param level Confidence level.
 #' @param se,information Standard-error type and information; see [vcov.mofia()].
 #' @param ... Not used.
-#' @return A matrix with lower and upper limits.
+#' @return A matrix with lower and upper limits (`NA` where the standard error
+#'   is not available).
 #' @export
 confint.mofia <- function(object, parm, level = 0.95, se = c("MLR", "ML", "MLF"),
                           information = c("default", "reduced", "exact"), ...) {
   se <- match.arg(se)
   est <- object$coefficients
-  s <- sqrt(pmax(diag(vcov(object, se, information)), 0))
+  s <- .se_from_vcov(vcov(object, se, information))
   if (!missing(parm)) { est <- est[parm]; s <- s[parm] }
   a <- (1 - level) / 2; z <- stats::qnorm(1 - a)
   out <- cbind(est - z * s, est + z * s)
@@ -192,6 +203,7 @@ tidy.mofia <- function(x, conf.int = FALSE, conf.level = 0.95, se = c("MLR", "ML
 glance.mofia <- function(x, ...) {
   data.frame(logLik = x$loglik, AIC = stats::AIC(x), BIC = stats::BIC(x), npar = x$npar, nobs = x$nobs,
              converged = isTRUE(x$converged), newton_decrement = x$newton_decrement,
-             scaling = if (is.null(x$scaling)) NA_real_ else x$scaling[[x$information %||% "reduced"]],
+             scaling = if (is.null(x$scaling)) NA_real_ else x$scaling[[x$information %||% "exact"]],
+             status = x$status %||% NA_character_,
              link = x$link)
 }

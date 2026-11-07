@@ -43,9 +43,11 @@ available). Default: \code{getOption("mofia.threads", 1)}.}
 }
 \value{
 An object of class \code{mofia} with components including
-\code{coefficients}, \code{loglik}, \code{npar}, \code{nobs}, \code{converged},
-\code{newton_decrement}, \code{vcov} (a list of covariance matrices), \code{scaling}
-(robust scaling correction factors), \code{model}, \code{link} and \code{nq}.
+\code{coefficients}, \code{loglik}, \code{npar}, \code{nobs}, \code{converged}, \code{status} (\code{"ok"},
+\code{"saddle"} or \code{"singular"}), \code{information_eigen} (smallest and largest
+eigenvalue of the information matrix), \code{newton_decrement}, \code{vcov} (a list
+of covariance matrices), \code{scaling} (robust scaling correction factors),
+\code{model}, \code{link} and \code{nq}.
 }
 \description{
 Estimates a moderated (nonlinear) factor model by marginal maximum
@@ -57,23 +59,32 @@ computed in C++.
 
 Three kinds are computed: \code{"ML"} (inverse observed information), \code{"MLR"}
 (robust sandwich, the default in \code{\link[=summary.mofia]{summary.mofia()}}) and \code{"MLF"} (outer
-product of the per-person scores). ML and MLR use one of two versions of the
-observed information. \code{"exact"} is the full Hessian of the log-likelihood.
-\code{"reduced"} omits the term that involves the second derivatives of the
-nonlinear parameter transformations (log-linear factor and residual
-variances, Fisher-z correlations); this term has expectation zero at the
-true parameters, so both versions are consistent. By default
-(\code{information = "default"}), models with categorical items use the reduced
-and models with only continuous items the exact information. In simulations
-both gave close to nominal coverage; the reduced version was slightly less
-biased for factor-variance moderation.
+product of the per-person scores, valid only for a correctly specified
+model). ML and MLR use the observed information, by default the full
+Hessian of the log-likelihood (\code{information = "exact"}). This is the
+derivative of the estimating equations, which the sandwich needs to be
+robust to misspecification.
+
+\code{information = "reduced"} is available for comparison with software that
+differentiates through the person-level parameters only: it omits the term
+with the second derivatives of the nonlinear parameter transformations
+(log-linear factor and residual variances, Fisher-z correlations). That term
+has expectation zero when the model is correctly specified, so reduced ML
+standard errors are consistent then. Under misspecification it does not
+vanish, and reduced MLR standard errors and scaling factors are not robust;
+use them only as a correct-specification check.
 }
 
 \section{Convergence}{
 
-Convergence is judged by the Newton decrement, the log-likelihood gain still
-available from one more Newton step (\eqn{g'A^{-1}g/2}); the fit counts as
-converged when it is below \code{1e-6}.
+A fit counts as converged when the information matrix at the solution is
+positive definite (the solution is a maximum, not a saddle point, and the
+model is identified by the data) and the Newton decrement, the
+log-likelihood gain still available from one more Newton step
+(\eqn{g'A^{-1}g/2}), is below \code{1e-6}. If the information matrix is not
+positive definite, the fit is marked as not converged, \code{status} is
+\code{"saddle"} or \code{"singular"}, and standard errors and tests are not reported.
+With \code{se = FALSE} only the gradient is checked.
 }
 
 \examples{

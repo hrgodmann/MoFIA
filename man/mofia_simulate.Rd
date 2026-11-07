@@ -4,7 +4,14 @@
 \alias{mofia_simulate}
 \title{Simulate data from a moderated factor model}
 \usage{
-mofia_simulate(object, theta = NULL, X = NULL, link = NULL, seed = NULL)
+mofia_simulate(
+  object,
+  theta = NULL,
+  newdata = NULL,
+  X = NULL,
+  link = NULL,
+  seed = NULL
+)
 }
 \arguments{
 \item{object}{A \code{mofia_model} or a fitted \code{mofia} object (whose estimates and
@@ -12,8 +19,15 @@ link are then the defaults).}
 
 \item{theta}{Named parameter vector (names as in \code{object$par$name}).}
 
-\item{X}{Moderator values: a matrix or data frame with the model's moderator
-columns. Default: the moderator values of the model's data.}
+\item{newdata}{Optional data frame with the moderator \emph{variables} on their
+original scale (as for \code{\link[=predict.mofia]{predict.mofia()}}). The returned data contain these
+variables, so they can be refitted with the same model specification
+(formula, standardization).}
+
+\item{X}{Alternatively, moderator values on the model's \emph{design} scale: a
+matrix or data frame with the model's moderator columns (\code{m$moderators};
+dummy codes, interactions, standardized values). The returned data then
+contain these design columns.}
 
 \item{link}{\code{"logit"} or \code{"probit"} for categorical items.}
 
@@ -21,8 +35,10 @@ columns. Default: the moderator values of the model's data.}
 }
 \value{
 A data frame with the simulated items (categorical items in the
-original coding of the model's data) and the moderators. The simulated
-factor scores are attached as attribute \code{"eta"}.
+original coding of the model's data) and the moderators. Without
+\code{newdata} and \code{X}, the moderator variables of the model's data are used
+and returned on their original scale. The simulated factor scores are
+attached as attribute \code{"eta"}, the design matrix used as attribute \code{"X"}.
 }
 \description{
 Draws item responses from a model at given parameter values, e.g. for power

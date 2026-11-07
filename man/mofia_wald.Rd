@@ -20,7 +20,7 @@ a regular expression selecting parameters, e.g. \verb{"^beta\\\[DevilPossession,
 
 \item{se}{Covariance type: \code{"MLR"} (default), \code{"ML"} or \code{"MLF"}.}
 
-\item{information}{\code{"default"}, \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
+\item{information}{\code{"default"} (exact), \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
 
 \item{regex}{Treat \code{params} as a regular expression?}
 }

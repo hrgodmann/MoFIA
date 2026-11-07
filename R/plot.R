@@ -61,7 +61,8 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
     else if (inf$type == "binary") inf$values else inf$levels
   nd <- .reference_data(des, length(grid), at); nd[[moderator]] <- grid
   X <- .design_X(model, nd)
-  V <- vcov(x, se); th <- x$coefficients; pt <- model$par
+  V <- tryCatch(vcov(x, se), error = function(e) NULL); th <- x$coefficients; pt <- model$par
+  if (is.null(V)) message("No standard errors available; the plot shows estimates without bands.")
   z <- stats::qnorm(1 - (1 - level) / 2)
   cont <- inf$type == "continuous"
   xs <- if (cont) grid else seq_along(grid)
@@ -72,7 +73,8 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
     G <- matrix(0, nrow(X), length(th), dimnames = list(NULL, names(th)))
     for (r in which(!is.na(idx_mod))) G[, idx_mod[r]] <- X[, r]
     if (!is.null(base)) G[, base] <- 1
-    est <- drop(G %*% th); s <- sqrt(pmax(rowSums((G %*% V) * G), 0))
+    est <- drop(G %*% th)
+    s <- if (is.null(V)) rep(NA_real_, nrow(G)) else { v <- rowSums((G %*% V) * G); ifelse(is.finite(v) & v >= 0, sqrt(pmax(v, 0)), NA_real_) }
     cbind(est = est, lo = est - z * s, hi = est + z * s)
   }
   band <- function(xx, m, col) {
@@ -80,7 +82,7 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
       graphics::polygon(c(xx, rev(xx)), c(m[, "lo"], rev(m[, "hi"])), col = grDevices::adjustcolor(col, 0.2), border = NA)
       graphics::lines(xx, m[, "est"], col = col, lwd = 2)
     } else {
-      ok <- m[, "hi"] - m[, "lo"] > 1e-10
+      ok <- is.finite(m[, "hi"]) & is.finite(m[, "lo"]) & m[, "hi"] - m[, "lo"] > 1e-10
       if (any(ok)) graphics::arrows(xx[ok], m[ok, "lo"], xx[ok], m[ok, "hi"], angle = 90, code = 3, length = 0.05, col = col)
       graphics::points(xx, m[, "est"], pch = 19, col = col)
     }
@@ -97,7 +99,7 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
       m <- lincomb(im); v <- lincomb(iv, b0)
       list(mean = m, sd = exp(v / 2))
     })
-    rng <- function(k) range(unlist(lapply(res, function(r) r[[k]][, c("lo", "hi")])))
+    rng <- function(k) range(unlist(lapply(res, function(r) r[[k]])), finite = TRUE)
     for (k in c("mean", "sd")) {
       graphics::plot(xs, xs, type = "n", ylim = rng(k), xlab = xlab_, xaxt = if (cont) "s" else "n",
                      ylab = if (k == "mean") "Factor mean" else "Factor SD", ...)
@@ -123,7 +125,7 @@ plot.mofia <- function(x, type = c("factors", "loadings", "items"), moderator = 
       m <- if (is.na(b0)) { r <- lincomb(im); r + 1 } else lincomb(im, b0)     # marker loading fixed to 1
       curves[[sprintf("%s (%s)", it, model$factors[d])]] <- m
     }
-    yl <- range(unlist(lapply(curves, function(m) m[, c("lo", "hi")])))
+    yl <- range(unlist(curves), finite = TRUE)
     graphics::plot(xs, xs, type = "n", ylim = yl, xlab = xlab_, ylab = "Loading", xaxt = if (cont) "s" else "n", ...)
     axis_x()
     cols <- grDevices::hcl.colors(max(3, length(curves)), "Dark 3")

@@ -31,7 +31,7 @@ test_that("invalid specifications are refused", {
 test_that("cases with missing moderators are removed with a warning", {
   data(parabelief)
   d <- parabelief[1:50, ]; d$Age[1:3] <- NA
-  expect_warning(m <- mofia_model(d, items = c("Aliens", "Sorcery", "HauntedPlaces"), moderators = "Age"), "3 case")
+  expect_warning(m <- mofia_model(d, items = c("Aliens", "Sorcery", "HauntedPlaces"), moderators = "Age", sparse = 0), "3 case")
   expect_equal(m$N, 47)
 })
 

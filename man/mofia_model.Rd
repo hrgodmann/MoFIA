@@ -35,8 +35,12 @@ is a named list.}
 a one-sided formula such as \code{~ age + gender + age:gender + I(age^2)}. With a
 formula, factor and character variables are dummy-coded (treatment
 contrasts) and interactions and transformations are allowed; the resulting
-model-matrix columns are the moderators. Cases with missing moderator
-values are removed with a warning.}
+model-matrix columns are the moderators (a comma in a column name, as in
+\verb{poly(age, 2)1}, becomes a semicolon). Data-dependent transformations such
+as \code{scale()} or \code{poly()} keep the values learned from the fitted data when
+new data are predicted. Cases with missing moderator values are removed
+with a warning; moderators must be finite, non-constant and not linearly
+dependent.}
 
 \item{loadings}{Which items load on which factors: a measurement string in
 lavaan style (\code{"f1 =~ y1 + y2 + y3; f2 =~ y4 + y5"}), a named list mapping
@@ -130,6 +134,34 @@ character vector of moderators (applied to all factors), a named list
 mapping factors to moderators, or a logical factors x moderators matrix.
 \code{cor_mod} can be \code{TRUE}/\code{FALSE}, a character vector of moderators (applied
 to all factor pairs), or a logical pairs x moderators matrix.
+
+Matrices and arrays must have exactly the model's dimensions. If they carry
+dimension names (items, factors, moderators, factor pairs such as
+\code{"f1,f2"}), these must match the model's names and are used to align the
+entries; without names the entries are taken in the model's order. Nothing is
+recycled.
+}
+
+\section{Identification}{
+
+Fixing the baseline factor mean and variance (or a marker loading) does not
+identify every moderation pattern. If a factor's mean and the
+thresholds/intercepts of \emph{all} its items depend on the same moderator, a
+shift of the factor mean cannot be told apart from equal shifts of all
+items; likewise for the factor variance and \emph{all} loadings. Keep at least
+one anchor item per factor and moderator whose parameters are not moderated.
+Patterns that are exactly unidentified are refused with an error; patterns
+identified only through the functional form of the moderation (for example,
+exponential variance against linear loadings for a continuous moderator)
+give a warning. \code{\link[=mofia]{mofia()}} additionally checks that the information matrix at
+the solution is positive definite. Which items are invariant is an
+assumption: choosing anchors from the same data (for example with
+\code{\link[=mofia_score_test]{mofia_score_test()}}) and then testing on those data is a form of
+post-selection inference.
+
+Cases without any observed item response are removed with a warning (they
+do not contribute to the likelihood). Cases with some observed responses
+contribute the likelihood of their observed items (missing at random).
 }
 
 \section{Parameter names}{
@@ -154,7 +186,7 @@ m <- mofia_model(parabelief,
                   UB = c("SpiritsGhosts", "GnomesElves", "Aliens",
                          "DevilPossession", "Sorcery", "HauntedPlaces")),
   moderators = c("Age", "Male"),
-  threshold_mod = TRUE, cor_mod = TRUE)
+  threshold_mod = c("Dowsing", "DevilPossession"), cor_mod = TRUE)
 m
 
 # the same, with measurement syntax and a moderator formula
@@ -163,8 +195,13 @@ m2 <- mofia_model(parabelief,
                      MindReading + Willpower + SeeingFuture + SeeingEvents
               UB =~ SpiritsGhosts + GnomesElves + Aliens + DevilPossession +
                     Sorcery + HauntedPlaces",
-  moderators = ~ Age * Male, threshold_mod = TRUE, cor_mod = TRUE)
+  moderators = ~ Age * Male, threshold_mod = c("Dowsing", "DevilPossession"),
+  cor_mod = TRUE)
 m2$moderators
+
+# not identified: the factor means and all thresholds depend on Age and Male
+try(mofia_model(parabelief, loadings = list(UB = c("SpiritsGhosts", "Aliens",
+                "Sorcery")), moderators = c("Age", "Male"), threshold_mod = TRUE))
 }
 \seealso{
 \code{\link[=mofia]{mofia()}}, \code{\link[=mofia_drop]{mofia_drop()}}

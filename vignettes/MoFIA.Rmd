@@ -43,8 +43,11 @@ item parameters are not moderated. Moderation of item parameters is added with
 items, moderated by all moderators).
 
 To compare factor means across the moderators, at least one item must keep
-invariant parameters; here `SpiritsGhosts` serves as the anchor. We fit three
-nested models:
+invariant parameters; here `SpiritsGhosts` serves as the anchor. Without an
+anchor, a moderated factor mean cannot be told apart from equal threshold
+shifts of all items (and a moderated factor variance from equal changes of all
+loadings); `mofia_model()` refuses such exactly unidentified models and warns
+about weakly identified ones. We fit three nested models:
 
 * **scalar**: no item parameter is moderated;
 * **metric**: the thresholds of all items except the anchor are moderated;
@@ -71,8 +74,11 @@ metric
 
 `mofia()` uses the logistic link for categorical items by default
 (`link = "probit"` is also available). The factors are integrated out by
-adaptive Gauss-Hermite quadrature, and convergence is checked with the Newton
-decrement, the log-likelihood gain still available from one more Newton step.
+adaptive Gauss-Hermite quadrature. A fit counts as converged when the
+information matrix is positive definite (a maximum, not a saddle point, and an
+identified model) and the Newton decrement, the log-likelihood gain still
+available from one more Newton step, is negligible. Otherwise no standard errors
+or tests are reported.
 
 ## Comparing models
 
@@ -110,8 +116,12 @@ The robust statistics flag threshold DIF for Aliens, DevilPossession and
 SpiritsGhosts (Holm-adjusted *p* < .05) and no loading DIF, in line with the
 model comparisons above. SpiritsGhosts, the anchor of the models above, is
 flagged too. Tests against a scalar model are relative to the other items, and
-choosing anchors is a known difficulty of DIF analysis; the item with the
-weakest evidence for DIF (here GnomesElves) is a better anchor candidate.
+choosing anchors is a known difficulty of DIF analysis. The item with the
+weakest evidence for DIF (here GnomesElves) is a natural candidate for a
+sensitivity analysis with another anchor, but this is a heuristic: choosing
+anchors from the same data and then testing on these data is post-selection
+inference, and the Holm adjustment covers only the screen itself. Substantive
+arguments or independent data are the better basis for anchors.
 
 ## Parameter estimates
 
@@ -127,8 +137,11 @@ est[est$type %in% c("beta", "gamma", "delta"), c("estimate", "se", "z", "p")]
 parameters on the log factor variance. Both are on the scale of the baseline
 factor (mean 0 and variance 1 for a person with all moderators at 0). `beta`
 parameters shift all thresholds of an item. Standard errors are robust (MLR) by
-default; `summary(fit, se = "ML")` and `vcov(fit, se = "ML")` give the
-model-based ones.
+default, a sandwich with the exact observed information; `summary(fit, se =
+"ML")` and `vcov(fit, se = "ML")` give the model-based ones. The robust
+correction protects the standard errors against misspecified distributions; it
+does not make a misspecified moderation effect the quantity of scientific
+interest.
 
 ## Plots, factor scores and predictions
 
@@ -141,9 +154,10 @@ plot(metric, "factors", moderator = "Age")
 plot(metric, "items", moderator = "Male", items = c("DevilPossession", "Aliens"))
 ```
 
-`mofia_scores()` gives EAP factor scores with posterior SDs, and `predict()`
-gives model-implied category probabilities or expected item scores for chosen
-moderator values:
+`mofia_scores()` gives EAP factor scores with posterior SDs (conditional on
+the estimated parameters, so they do not include estimation uncertainty), and
+`predict()` gives model-implied category probabilities or expected item scores
+for chosen moderator values. Plot bands are pointwise:
 
 ```{r}
 head(mofia_scores(metric), 3)

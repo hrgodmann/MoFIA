@@ -17,13 +17,15 @@
 \item{se}{\code{"MLR"} (robust sandwich, default), \code{"ML"} (inverse observed
 information) or \code{"MLF"} (outer product of the scores).}
 
-\item{information}{\code{"default"}, \code{"reduced"} or \code{"exact"} observed
-information; see \code{\link[=mofia]{mofia()}}.}
+\item{information}{\code{"default"} (the exact information), \code{"exact"} or
+\code{"reduced"} observed information; see \code{\link[=mofia]{mofia()}}.}
 
 \item{...}{Not used.}
 }
 \value{
-A covariance matrix.
+A covariance matrix. An error is raised when it is not available
+(no standard errors computed, or an information matrix that is not
+positive definite).
 }
 \description{
 Covariance matrix of the estimates

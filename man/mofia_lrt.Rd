@@ -20,14 +20,16 @@ mofia_lrt(
 
 \item{scaled}{Scaled (robust) test? Otherwise the ordinary LR test.}
 
-\item{information}{\code{"default"}, \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
+\item{information}{\code{"default"} (exact), \code{"reduced"} or \code{"exact"}; see \code{\link[=mofia]{mofia()}}.}
 
 \item{sb2010}{Also report the strictly positive Satorra-Bentler (2010)
 version, which evaluates the scaling factor of \code{fit1} at the estimates of
 \code{fit0} (one extra information computation).}
 
 \item{check_nested}{Stop if the parameter names of \code{fit0} are not a subset of
-those of \code{fit1}?}
+those of \code{fit1}? Set to \code{FALSE} only for models that are nested in a way
+the names cannot show (e.g. the same model under marker and variance
+identification).}
 }
 \value{
 A data frame with the test statistic, degrees of freedom, scaling
@@ -39,6 +41,16 @@ Compares a restricted model \code{fit0} with a more general model \code{fit1}. W
 robust (MLR) estimator is computed: \eqn{c_d = (p_0 c_0 - p_1 c_1)/(p_0 - p_1)}
 and \eqn{T_d = -2(\ell_0 - \ell_1)/c_d}, where \eqn{p} are the numbers of
 parameters and \eqn{c} the scaling correction factors.
+}
+\details{
+Both models must be fitted to the same cases and item responses,
+use the same link for categorical items, and have converged (positive
+definite information, see \code{\link[=mofia]{mofia()}}); every moderator of \code{fit0} must be a
+moderator of \code{fit1} with the same values. Otherwise the test stops with the
+reason. A clearly negative likelihood-ratio statistic (below -0.01) means
+that the models are not nested or that a fit did not reach its maximum, and
+is an error. Scaled statistics are asymptotic mean corrections; their
+finite-sample calibration is not guaranteed.
 }
 \references{
 Satorra, A., & Bentler, P. M. (2001). A scaled difference chi-square test
