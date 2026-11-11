@@ -12,10 +12,24 @@
 #' moderated factor means and variances.
 #'
 #' @param object A fitted `mofia` object.
-#' @return A data frame with one row per person (in the order of the fitted
-#'   data) and, per factor, its EAP score and posterior SD (`<factor>_sd`). For
-#'   several factors, the posterior covariance matrices are attached as
-#'   attribute `"cov"` (persons x factors x factors).
+#' @return A data frame with one row per fitted case (in the order of the
+#'   fitted data) and, per factor, its EAP score and posterior SD
+#'   (`<factor>_sd`). Cases removed by [mofia_model()] (missing moderator
+#'   values, no observed response) have no row. The row names are those of the
+#'   fitted rows of the original data, and attribute `"row_index"` gives their
+#'   positions in it (`model$cases`), so scores can be matched to the data by
+#'   index rather than by position. Start from a full-length column of `NA`
+#'   (also when reusing an existing column), so that excluded cases stay
+#'   missing:
+#'   ```
+#'   data$score <- rep(NA_real_, nrow(data))
+#'   data$score[attr(s, "row_index")] <- s$eta
+#'   ```
+#'   For models created with MoFIA 0.1.0, which did not record the original
+#'   positions, `"row_index"` is `NULL` (unknown) and the row names are those
+#'   kept in the model, if any. For several factors, the posterior covariance
+#'   matrices are attached as attribute `"cov"` (persons x factors x factors,
+#'   the first dimension named like the rows).
 #' @examples
 #' \donttest{
 #' data(parabelief)
@@ -39,13 +53,26 @@ mofia_scores <- function(object) {
     mean[, d] <- st$mu[, d] + Reduce(`+`, lapply(seq_len(d), function(k) Cf(d, k) * post$m[, k]))
     for (e in seq_len(d)) M[, d, e] <- Reduce(`+`, lapply(e:d, function(k) Cf(d, k) * Lz(k, e)))
   }
-  cov <- array(0, c(N, D, D), dimnames = list(NULL, model$factors, model$factors))
+  ids <- .case_ids(model)
+  cov <- array(0, c(N, D, D), dimnames = list(ids$names, model$factors, model$factors))
   for (d in seq_len(D)) for (f in seq_len(D)) cov[, d, f] <- rowSums(M[, d, , drop = FALSE] * M[, f, , drop = FALSE])
   sds <- vapply(seq_len(D), function(d) sqrt(pmax(cov[, d, d], 0)), numeric(N))
   out <- data.frame(mean, matrix(sds, N, D))
   names(out) <- c(model$factors, paste0(model$factors, "_sd"))
+  rownames(out) <- ids$names
+  attr(out, "row_index") <- ids$index
   if (D > 1) attr(out, "cov") <- cov
   out
+}
+
+# identities of the fitted cases: positions in and row names of the original data
+# (see below for models from MoFIA 0.1.0, which have no $cases)
+.case_ids <- function(model) {
+  cs <- model$cases
+  if (!is.null(cs)) return(list(index = cs$index, names = cs$names))
+  # models from MoFIA 0.1.0 (no $cases): the original positions of the fitted cases are
+  # not known after exclusions, so none are claimed; row names kept in $Y are used
+  list(index = NULL, names = rownames(model$Y))
 }
 
 # Marginal (over the factors) moments of each item's linear predictor given the
@@ -134,7 +161,11 @@ mofia_scores <- function(object) {
 #' @param ... Not used.
 #' @return For `"expected"`, a persons x items matrix. For `"prob"`, a list with
 #'   one persons x categories matrix per categorical item (continuous items are
-#'   omitted). For `"scores"`, a data frame.
+#'   omitted). For `"scores"`, a data frame. The rows are the fitted cases
+#'   (without `newdata`) or the rows of `newdata`, in order; their row names
+#'   are carried over, and attribute `"row_index"` gives the positions in the
+#'   original data (fitted cases, see [mofia_scores()]; `NULL` for models
+#'   created with MoFIA 0.1.0) or in `newdata`.
 #' @examples
 #' \donttest{
 #' data(parabelief)
@@ -152,16 +183,23 @@ predict.mofia <- function(object, newdata = NULL, type = c("expected", "prob", "
     if (!is.null(newdata)) stop("Factor scores are available for the fitted data only.")
     return(mofia_scores(object))
   }
-  X <- if (is.null(newdata)) model$X else .design_X(model, newdata)
+  if (is.null(newdata)) {
+    X <- model$X; ids <- .case_ids(model)
+  } else {
+    newdata <- as.data.frame(newdata)
+    X <- .design_X(model, newdata); ids <- list(index = seq_len(nrow(newdata)), names = rownames(newdata))
+  }
   ml <- .marginal_lp(object$coefficients, model, X); pr <- ml$pr
-  probs <- list(); expd <- matrix(NA_real_, nrow(X), model$P, dimnames = list(NULL, model$items))
+  probs <- list(); expd <- matrix(NA_real_, nrow(X), model$P, dimnames = list(ids$names, model$items))
   for (j in seq_len(model$P)) {
     if (model$cont[j]) { expd[, j] <- ml$m[, j]; next }
     pk <- vapply(.marginal_probs(ml$m[, j], ml$s[, j], pr$tau[[j]], object$link), identity, numeric(nrow(X)))
-    pk <- matrix(pk, nrow(X)); colnames(pk) <- model$levels[[j]]
+    pk <- matrix(pk, nrow(X), dimnames = list(ids$names, model$levels[[j]]))
+    attr(pk, "row_index") <- ids$index
     probs[[model$items[j]]] <- pk
     expd[, j] <- drop(pk %*% model$levels[[j]])
   }
+  attr(expd, "row_index") <- ids$index
   if (type == "prob") probs else expd
 }
 

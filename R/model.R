@@ -23,6 +23,10 @@
 #' \deqn{P(y_{ij} \ge k \mid \eta_i) = F(\nu_{ij} + \lambda_{ij}'\eta_i - \tau_{jk}),}
 #' with \eqn{F} the logistic or standard normal distribution function, so a
 #' positive \eqn{\beta} shifts all thresholds of the item down (uniform DIF).
+#' The shift is the same for all thresholds of an item: the spacing of the
+#' thresholds does not depend on the moderators. Category-specific threshold
+#' moderation is not part of the model, and tests of \eqn{\beta} (Wald,
+#' likelihood-ratio, score) do not test that larger alternative.
 #' A continuous item is normal with mean \eqn{\nu_{0j} + \nu_{ij} + \lambda_{ij}'\eta_i}
 #' and residual variance \eqn{\exp(\omega_{0j} + x_i'\omega_j)}.
 #'
@@ -53,11 +57,23 @@
 #' shift of the factor mean cannot be told apart from equal shifts of all
 #' items; likewise for the factor variance and *all* loadings. Keep at least
 #' one anchor item per factor and moderator whose parameters are not moderated.
-#' Patterns that are exactly unidentified are refused with an error; patterns
-#' identified only through the functional form of the moderation (for example,
+#'
+#' Patterns that are exactly unidentified are refused with an error. For the
+#' factor mean this includes models whose loadings are moderated as well, when
+#' the products of the loading moderators with the mean moderators are
+#' themselves absorbed by the threshold moderation: for a binary moderator
+#' \eqn{z}, \eqn{\gamma \to \gamma + c} and
+#' \eqn{\beta_j \to \beta_j - c(\lambda_{0j} + \lambda_{1j})} leave the
+#' likelihood unchanged because \eqn{z^2 = z} (likewise for binary moderators
+#' and all their interactions, or for `x` and `I(x^2)` both moderating the
+#' thresholds). Patterns identified only through the moderated loadings (a
+#' mean shift that is absorbed unless those loading effects are not zero), or
+#' only through the functional form of the moderation (for example,
 #' exponential variance against linear loadings for a continuous moderator)
-#' give a warning. [mofia()] additionally checks that the information matrix at
-#' the solution is positive definite. Which items are invariant is an
+#' give a warning. These checks look at each factor separately and are
+#' sufficient conditions, not a proof of identification: [mofia()]
+#' additionally checks that the information matrix at the solution is positive
+#' definite. Which items are invariant is an
 #' assumption: choosing anchors from the same data (for example with
 #' [mofia_score_test()]) and then testing on those data is a form of
 #' post-selection inference.
@@ -126,7 +142,23 @@
 #'   not guarantee a positive-definite correlation matrix for all moderator
 #'   values, and this case is not methodologically established.
 #'
-#' @return An object of class `mofia_model`.
+#' @return An object of class `mofia_model`. Among its components:
+#'   \describe{
+#'     \item{`cases`}{Which input rows were fitted: `index` (positions in
+#'       `data`, in the order of the fitted cases), `names` (their row names),
+#'       `n_input` (rows of `data`), `excluded_moderator` and
+#'       `excluded_response` (positions of the cases removed for missing
+#'       moderator values and for having no observed item response).}
+#'     \item{`identification_issues`}{A data frame (columns `factor`,
+#'       `parameter`, `moderators`, `status`, `message`) of the patterns that are
+#'       identified only weakly (`status` `"identified_by_loading_moderation"`
+#'       or `"identified_by_functional_form"`); empty if there are none. The
+#'       same data frame is attached as `$issues` to the warning (class
+#'       `"mofia_identification_warning"`) and, for exactly unidentified
+#'       patterns (`status` `"not_identified"`), to the error (class
+#'       `"mofia_identification_error"`), so that callers can handle them
+#'       without parsing messages.}
+#'   }
 #' @seealso [mofia()], [mofia_drop()]
 #' @examples
 #' data(parabelief)
@@ -163,10 +195,7 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
                         sparse = 5, experimental_cor = FALSE) {
   cov_param <- match.arg(cov_param); identification <- match.arg(identification)
   if (!is.data.frame(data)) data <- as.data.frame(data)
-
-  # ---- moderators: columns or a formula; missing values; standardization ----
-  des <- .moderator_design(data, moderators, standardize)
-  data <- des$data; moderators <- des$moderators; moddata <- des$raw
+  n_input <- nrow(data); input_names <- rownames(data)
 
   # ---- items, factors and the loading pattern ----
   if (is.character(loadings) && length(loadings) == 1 && grepl("=~", loadings, fixed = TRUE))
@@ -190,6 +219,29 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
   if (is.null(items)) stop("Give 'items', or 'loadings' as a named list.")
   items <- as.character(items)
   if (is.null(factors)) factors <- if (is.null(loadings)) "eta" else (colnames(loadings) %||% paste0("f", seq_len(ncol(as.matrix(loadings)))))
+
+  # ---- cases: both exclusions come first, before anything is learned from the data
+  # (moderator types, standardization, data-dependent formula terms), so that these
+  # describe exactly the fitted cases ----
+  mvars <- .moderator_vars(moderators)
+  miss <- setdiff(c(items, mvars), names(data))
+  if (length(miss)) stop("Not in the data: ", paste(miss, collapse = ", "))
+  nax <- if (length(mvars)) !stats::complete.cases(data[, mvars, drop = FALSE]) else rep(FALSE, n_input)
+  if (any(nax)) warning(sum(nax), " case(s) with missing moderator values removed.", call. = FALSE)
+  # cases without any observed item response carry no information
+  empty <- !nax & rowSums(!is.na(as.matrix(data[, items, drop = FALSE]))) == 0
+  if (any(empty))
+    warning(sum(empty), " case(s) without any observed item response removed (they carry no information).", call. = FALSE)
+  keep <- !nax & !empty
+  if (!any(keep)) stop(if (all(nax)) "No cases with complete moderator values." else "No cases with observed item responses.")
+  data <- data[keep, , drop = FALSE]
+  cases <- list(index = unname(which(keep)), names = input_names[keep], n_input = n_input,
+                excluded_moderator = unname(which(nax)), excluded_response = unname(which(empty)))
+
+  # ---- moderators: columns or a formula; standardization ----
+  des <- .moderator_design(data, moderators, standardize)
+  data <- des$data; moderators <- des$moderators; moddata <- des$raw
+
   P <- length(items); Q <- length(moderators); D <- length(factors)
   miss <- setdiff(c(items, moderators), names(data))
   if (length(miss)) stop("Not in the data: ", paste(miss, collapse = ", "))
@@ -203,14 +255,6 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
   if (any(rowSums(loadings) == 0)) stop("Item(s) without a loading: ", paste(items[rowSums(loadings) == 0], collapse = ", "))
 
   if (any(moderators %in% items)) stop("Items cannot also be moderators: ", paste(intersect(moderators, items), collapse = ", "))
-
-  # ---- cases without any observed item response carry no information ----
-  empty <- rowSums(!is.na(as.matrix(data[, items, drop = FALSE]))) == 0
-  if (any(empty)) {
-    warning(sum(empty), " case(s) without any observed item response removed (they carry no information).", call. = FALSE)
-    data <- data[!empty, , drop = FALSE]; moddata <- moddata[!empty, , drop = FALSE]
-  }
-  if (!nrow(data)) stop("No cases with observed item responses.")
 
   # ---- moderation patterns ----
   lm <- array(FALSE, c(P, D, Q), dimnames = list(items, factors, moderators))
@@ -296,7 +340,7 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
             ". Estimates of their thresholds can be unstable; see mofia_collapse().", call. = FALSE)
   X <- matrix(as.numeric(as.matrix(data[, moderators, drop = FALSE])), nrow(data), Q, dimnames = list(NULL, moderators))
   .check_moderators(X)
-  .check_identification(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param)
+  id_issues <- .check_identification(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param)
 
   # ---- parameter table ----
   rows <- list()
@@ -338,7 +382,8 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
                  loading_mod = lm, threshold_mod = tm, mean_mod = mean_mod, var_mod = var_mod,
                  cor_mod = cor_mod, pairs = pairs, npair = npair, cov_param = cov_param,
                  identification = identification, markers = mk_idx, cont = cont, resvar_mod = rm_,
-                 experimental_cor = isTRUE(experimental_cor), design = des$design, moddata = moddata, par = pt),
+                 experimental_cor = isTRUE(experimental_cor), design = des$design, moddata = moddata, par = pt,
+                 cases = cases, identification_issues = id_issues),
             class = "mofia_model")
 }
 
@@ -390,7 +435,10 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
   if (length(nf)) stop("Moderators must be finite numbers; not finite in: ", paste(nf, collapse = ", "), call. = FALSE)
   const <- colnames(X)[apply(X, 2, function(v) max(v) - min(v) == 0)]
   if (length(const)) stop("Constant moderator(s) (no variation in the data): ", paste(const, collapse = ", "), call. = FALSE)
-  q <- qr(cbind(1, X))
+  # rank with the intercept, on centred and scaled columns (same span): a moderator far
+  # from its origin (x = 10000 + small variation, with I(x^2)) is not taken for dependent
+  Xs <- sweep(X, 2, colMeans(X)); Xs <- sweep(Xs, 2, sqrt(colMeans(Xs^2)), "/")
+  q <- qr(cbind(1, Xs))
   if (q$rank < ncol(X) + 1) {
     dep <- colnames(X)[q$pivot[(q$rank + 1):(ncol(X) + 1)] - 1]
     stop("The moderators are linearly dependent (together with the intercept); remove: ",
@@ -400,49 +448,158 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
 }
 
 # Identification of the moderation effects. Fixing the baseline factor mean and
-# variance (or a marker loading) does not identify every moderation pattern:
-#  * mean / DIF: if the factor mean and the thresholds/intercepts of all items of
-#    the factor depend on the same moderator, a shift of the factor mean equals
-#    equal shifts of all items (exactly so when no loading of the factor is moderated);
+# variance (or a marker loading) does not identify every moderation pattern.
+#
+#  * mean / DIF. Shifting the mean moderation of factor d by c (gamma_d -> gamma_d + c)
+#    changes the linear predictor of item j by lambda_jd(x) * x'c, with
+#    lambda_jd(x) = lambda0_jd + x'lambda1_jd. Only the item's thresholds/intercept and
+#    its threshold moderation (span of 1 and the moderators in tm[j, ]) can absorb
+#    such a shift. If, for some c != 0 and every item j of the factor, x'c and the
+#    products x_p * x'c (p = moderators of the item's loading on d) all lie in that
+#    span over the observed moderator values, the shift is offset exactly for all
+#    parameter values: the model is not identified (error). Example: a binary z with
+#    mean, all thresholds and loadings moderated by z (z * z = z); the same holds for
+#    saturated sets of binary moderators and their interactions, or x and I(x^2)
+#    both in the threshold moderation. If x'c lies in every span but some product
+#    does not, the mean is identified only through the loading moderation (only if
+#    those loading effects are not zero): warning. Checked per factor; a shift that
+#    needs coordinated changes of several factors' means at particular loading
+#    values (cross-loadings) is left to the information-matrix check in mofia().
 #  * scale: if the factor variance and all loadings of the factor depend on the same
 #    moderator, a larger factor SD equals smaller loadings (exactly so for a binary
-#    moderator when nothing else on the factor is moderated; for a continuous moderator
-#    the model is identified only through the different functional forms, exp() vs
-#    linear).
-# Exactly unidentified patterns are errors, functional-form-only ones warnings. At
-# least one anchor item per factor and moderator avoids both.
+#    moderator when nothing else on the factor is moderated; otherwise, e.g. for a
+#    continuous moderator, the model is identified only through the different
+#    functional forms, exp() vs linear, if at all).
+#
+# Exact aliases are errors (class "mofia_identification_error"), the others
+# warnings (class "mofia_identification_warning"); both carry the data frame
+# $issues. At least one anchor item per factor and moderator avoids all of them.
+# These rules are sufficient conditions for the patterns they name, not a complete
+# proof of global identification; mofia() additionally checks the information matrix.
 .mofia_state <- new.env(parent = emptyenv())   # internal switches (not user options)
 
 .check_identification <- function(loadings, lm, tm, mean_mod, var_mod, X, identification, cov_param) {
-  D <- ncol(loadings); Q <- ncol(X); if (!Q) return(invisible())
-  if (isFALSE(.mofia_state$check_identification)) return(invisible())
-  items <- rownames(loadings); factors <- colnames(loadings); mods <- colnames(X)
+  D <- ncol(loadings); Q <- ncol(X)
+  none <- .identification_issues()
+  if (!Q || isFALSE(.mofia_state$check_identification)) return(invisible(none))
+  factors <- colnames(loadings); mods <- colnames(X)
   binary <- apply(X, 2, function(v) length(unique(v)) == 2)
-  errs <- warns <- character(0)
+  iss <- list()
+  add <- function(d, par, q, status, msg)
+    iss[[length(iss) + 1]] <<- .identification_issues(factors[d], par, paste(mods[q], collapse = ", "), status, msg)
   for (d in seq_len(D)) {
     on_d <- which(loadings[, d])
-    any_lm_d <- any(lm[on_d, d, ])
-    for (q in seq_len(Q)) {
-      if (mean_mod[d, q] && all(tm[on_d, q])) {
-        msg <- sprintf("the mean of factor '%s' and the thresholds/intercepts of all its items depend on '%s'", factors[d], mods[q])
-        if (!any_lm_d) errs <- c(errs, msg) else warns <- c(warns, msg)
+    # mean / DIF
+    Md <- which(mean_mod[d, ])
+    if (length(Md)) {
+      exact <- .mean_alias(X, Md, on_d, tm, lm[, d, , drop = FALSE], products = TRUE)
+      if (length(exact)) {
+        prod <- any(lm[on_d, d, ])
+        add(d, "mean", exact, "not_identified", sprintf(paste0(
+          "the mean of factor '%s' and the thresholds/intercepts of all its items depend on %s, and a shift of ",
+          "this mean is offset exactly by shifts of all items' thresholds/intercepts%s"), factors[d],
+          .quote_mods(mods[exact]),
+          if (prod) " (the moderated loadings do not help: their products with these moderators are absorbed as well, e.g. z * z = z for a binary z)" else ""))
+      } else {
+        lin <- .mean_alias(X, Md, on_d, tm, products = FALSE)
+        if (length(lin))
+          add(d, "mean", lin, "identified_by_loading_moderation", sprintf(paste0(
+            "the mean of factor '%s' and the thresholds/intercepts of all its items depend on %s; this is ",
+            "identified only through the moderated loadings, i.e. only if those loading effects are not zero ",
+            "(weakly if they are small)"), factors[d], .quote_mods(mods[lin])))
       }
+    }
+    # scale
+    for (q in seq_len(Q)) {
       if (var_mod[d, q] && all(lm[on_d, d, q])) {
-        msg <- sprintf("the variance of factor '%s' and the loadings of all its items depend on '%s'", factors[d], mods[q])
-        exact <- binary[q] && !any(lm[on_d, d, -q]) && !any(mean_mod[d, -q]) && (D == 1 || cov_param == "fisherz")
-        if (exact) errs <- c(errs, msg) else warns <- c(warns, msg)
+        ex <- binary[q] && !any(lm[on_d, d, -q]) && !any(mean_mod[d, -q]) && (D == 1 || cov_param == "fisherz")
+        if (ex) add(d, "variance", q, "not_identified", sprintf(paste0(
+          "the variance of factor '%s' and the loadings of all its items depend on the binary moderator '%s', ",
+          "and a larger factor SD is offset exactly by smaller loadings"), factors[d], mods[q]))
+        else add(d, "variance", q, "identified_by_functional_form", sprintf(paste0(
+          "the variance of factor '%s' and the loadings of all its items depend on '%s'; this is identified ",
+          "only through the functional form of the moderation (exponential variance vs linear loadings), ",
+          "if at all"), factors[d], mods[q]))
       }
     }
   }
-  if (length(errs))
-    stop("The model is not identified: ", paste(errs, collapse = "; "), ". Keep at least one anchor item per ",
-         "factor whose parameters do not depend on that moderator, or drop the factor-level moderation ",
-         "(mean_mod / var_mod).", call. = FALSE)
-  if (length(warns))
-    warning("Possibly not identified: ", paste(warns, collapse = "; "), ". Without an anchor item the model is ",
-            "identified only through the functional form of the moderation (if at all); estimates can be unstable ",
-            "and depend on that assumption. Consider keeping an anchor item.", call. = FALSE)
-  invisible()
+  issues <- if (length(iss)) do.call(rbind, iss) else none
+  rownames(issues) <- NULL
+  errs <- issues$status == "not_identified"
+  if (any(errs))
+    stop(structure(class = c("mofia_identification_error", "error", "condition"), list(
+      message = paste0("The model is not identified: ", paste(issues$message[errs], collapse = "; "),
+                       ". Keep at least one anchor item per factor whose parameters do not depend on that moderator, ",
+                       "or drop the factor-level moderation (mean_mod / var_mod)."),
+      call = NULL, issues = issues)))
+  if (nrow(issues))
+    warning(structure(class = c("mofia_identification_warning", "warning", "condition"), list(
+      message = paste0("Possibly not identified: ", paste(issues$message, collapse = "; "),
+                       ". Estimates can be unstable and depend on that assumption. Consider keeping an anchor item."),
+      call = NULL, issues = issues)))
+  invisible(issues)
+}
+
+.identification_issues <- function(factor = character(0), parameter = character(0), moderators = character(0),
+                                   status = character(0), message = character(0))
+  data.frame(factor = factor, parameter = parameter, moderators = moderators, status = status, message = message,
+             stringsAsFactors = FALSE)
+
+.quote_mods <- function(m) if (length(m) == 1) sprintf("'%s'", m) else
+  sprintf("the moderators %s", paste(sprintf("'%s'", m), collapse = ", "))
+
+# Moderators (indices into the columns of X) involved in a mean shift c != 0 of a
+# factor (supported on Md) that the items' thresholds/intercepts absorb exactly:
+# for every item j of the factor, X c (and, with products = TRUE, x_p * X c for the
+# moderators p of item j's loading) must lie in the column span S_j of
+# [1, X[, tm[j, ]]]. Solved as the null space of the stacked residuals; integer(0)
+# if there is none.
+#
+# Numerical conditioning. A moderator far from its origin (x = 10000 + small variation)
+# makes x * x nearly, but not exactly, a combination of 1 and x; measured against the
+# raw products such a residual is lost in rounding. The moderators are therefore
+# centred and scaled, x_q = m_q + s_q xs_q, which leaves every span containing the
+# intercept unchanged, and the products are expanded exactly. With b = s * c (the
+# shift in standardized units) and mu = m / s,
+#   X c = Xs b + mu'b,   x_p * (X c) / s_p = xs_p * (Xs b) + xs_p (mu'b) + (m_p / s_p) (X c).
+# The last term lies in S_j whenever X c does (the product-free condition, which is
+# also required), so the conditions are
+#   resid_j(Xs) b = 0   and   (resid_j(xs_p * Xs) + resid_j(xs_p) mu') b = 0.
+# All residuals are of standardized, well-conditioned vectors; resid_j(xs_p) is set
+# to exactly zero when xs_p lies in S_j (relative residual below 1e-10), so that a
+# large origin (mu) cannot magnify its rounding error. The rank is taken from the
+# singular values of the stacked, row-normalized conditions (no squaring), relative
+# to the size of the standardized products. An exact alias (zero up to rounding) is
+# thus told apart from a small but real residual, and the classification depends on
+# the origin and units of the moderators only through the actual model spaces (the
+# factor mean has no intercept, so its origin is part of the model).
+.mean_alias <- function(X, Md, on_d, tm, lm_d = NULL, products = TRUE, tol = 1e-8) {
+  m <- colMeans(X); sdv <- sqrt(colMeans(sweep(X, 2, m)^2))
+  if (any(!is.finite(sdv) | sdv == 0)) return(integer(0))       # refused elsewhere
+  Xs <- sweep(sweep(X, 2, m), 2, sdv, "/")
+  XM <- Xs[, Md, drop = FALSE]; k <- length(Md); mu <- m[Md] / sdv[Md]
+  Rt <- matrix(0, 0, k); nb <- 0
+  add <- function(M, ref) if (is.finite(ref) && ref > 0) {
+    q <- qr(rbind(Rt, M / ref))                        # keep only the k x k triangle
+    Rt <<- qr.R(q)[, order(q$pivot), drop = FALSE]     # (undo qr()'s column pivoting)
+    nb <<- nb + 1
+  }
+  for (j in on_d) {
+    qrj <- qr(cbind(1, Xs[, tm[j, ], drop = FALSE]))
+    add(qr.resid(qrj, XM), sqrt(sum(XM^2) / k))
+    if (products && !is.null(lm_d)) for (p in which(lm_d[j, 1, ])) {
+      A <- Xs[, p] * XM; a <- Xs[, p]
+      r <- qr.resid(qrj, a); if (sqrt(sum(r^2)) <= 1e-10 * sqrt(sum(a^2))) r[] <- 0
+      add(qr.resid(qrj, A) + outer(r, mu), sqrt((sum(A^2) + sum(a^2)) / (k + 1)))
+    }
+  }
+  if (!nb) return(integer(0))
+  sv <- svd(Rt, nu = 0, nv = k)
+  d <- c(sv$d, rep(0, k - length(sv$d)))
+  null <- which(d <= tol * sqrt(nb))
+  if (!length(null)) return(integer(0))
+  v <- abs(sv$v[, null, drop = FALSE])
+  Md[apply(v, 1, max) > 1e-6]
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
@@ -503,23 +660,29 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
 }
 
 # ---- moderators: columns or a one-sided formula -------------------------------------
-# Returns the data with (i) cases with missing moderator variables removed, (ii) the
-# chosen variables standardized, and (iii) for a formula, the model-matrix columns
+# Returns the data (cases with missing moderator values already removed) with (i) the
+# chosen variables standardized, and (ii) for a formula, the model-matrix columns
 # (dummies, interactions, transformations) added; plus the design needed to rebuild
 # the moderator matrix for new data.
+# the raw variables a moderator specification uses (character vector or formula)
+.moderator_vars <- function(moderators) {
+  if (is.null(moderators)) return(character(0))
+  if (inherits(moderators, "formula")) {
+    if (length(moderators) != 2) stop("The moderator formula must be one-sided, e.g. ~ age + male.")
+    return(all.vars(moderators))
+  }
+  as.character(moderators)
+}
+
 .moderator_design <- function(data, moderators, standardize) {
   if (is.null(moderators)) moderators <- character(0)
   is_f <- inherits(moderators, "formula")
-  if (is_f && length(moderators) != 2) stop("The moderator formula must be one-sided, e.g. ~ age + male.")
-  vars <- if (is_f) all.vars(moderators) else as.character(moderators)
+  vars <- .moderator_vars(moderators)
   miss <- setdiff(vars, names(data))
   if (length(miss)) stop("Not in the data: ", paste(miss, collapse = ", "))
   if (length(vars)) {
-    nax <- !stats::complete.cases(data[, vars, drop = FALSE])
-    if (any(nax)) {
-      warning(sum(nax), " case(s) with missing moderator values removed.", call. = FALSE)
-      data <- data[!nax, , drop = FALSE]
-    }
+    # cases with missing moderator values were removed by mofia_model()
+    if (!all(stats::complete.cases(data[, vars, drop = FALSE]))) stop("Missing moderator values.")
     nf <- vars[vapply(vars, function(v) is.numeric(data[[v]]) && any(!is.finite(data[[v]])), TRUE)]
     if (length(nf)) stop("Moderators must be finite numbers; not finite in: ", paste(nf, collapse = ", "), call. = FALSE)
   }
@@ -664,7 +827,7 @@ mofia_drop <- function(model, drop) {
                continuous = model$items[model$cont], resvar_mod = model$resvar_mod,
                experimental_cor = model$experimental_cor, sparse = 0)
   new <- suppressWarnings(do.call(mofia_model, utils::modifyList(args, list(...))))
-  new$design <- model$design; new$moddata <- model$moddata
+  new$design <- model$design; new$moddata <- model$moddata; new$cases <- model$cases
   new
 }
 

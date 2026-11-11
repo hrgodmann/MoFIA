@@ -1,3 +1,74 @@
+# MoFIA 0.1.0.9000
+
+## Corrections after the review of the engine fixes (11 November 2026)
+
+* The reduced information matrix is judged and inverted on the scale of the
+  exact information's diagonal, not its own: where the constraint curvature
+  cancels the exact information, the remaining finite-difference noise is no
+  longer presented as information (reduced standard errors and scaling factors
+  are then unavailable, as in 0.1.0). Exact information, MLF and well-scaled
+  reduced information are unchanged.
+* The mean/DIF alias check works on centred and scaled moderators with the
+  products expanded exactly, so a continuous moderator far from its origin
+  (e.g. 10000 + small variation) is classified like the centred one (identified
+  only through the loading moderation) instead of being refused as exactly
+  unidentified. Binary, interaction and quadratic aliases remain errors under
+  any coding. The linear-dependence check of the moderators is conditioned the
+  same way.
+* For models created with 0.1.0 (no `$cases`), scores and predictions keep the
+  row names stored in the model and no longer claim original positions
+  (`"row_index"` is `NULL`).
+* The documented way to attach scores to the data starts from a full-length
+  `NA` column, so excluded cases (also trailing ones) stay missing.
+
+## Corrections after the engine review (11 November 2026)
+
+* Positive definiteness of the information matrix (status `"ok"`, `"saddle"`
+  or `"singular"`) is judged on the matrix scaled to unit diagonal, and all
+  inverses (exact and reduced ML/MLR, MLF), sandwich covariances, scaling
+  factors and the Newton decrement are computed in these scaled coordinates
+  and transformed back. A moderator in large units (e.g. age in years and its
+  square) was wrongly reported as `"singular"`, with no standard errors or
+  tests. Genuine singular and saddle points are still reported. The raw
+  spectrum stays in `$information_eigen`; the scaled one is in
+  `$information_eigen_scaled`. Wald tests check the covariance of the tested
+  parameters on the correlation scale; score tests compare the information
+  left after conditioning with the candidates' own information, so that
+  neither depends on parameter units. Numerical second derivatives use steps
+  relative to the scale of the moderator for moderation effects.
+* Factor mean moderation together with threshold moderation of all items of
+  the factor is refused also when loadings are moderated, if the products of
+  the loading and mean moderators are absorbed by the thresholds (always for a
+  binary moderator, z * z = z; for binary moderators and all their
+  interactions; for `x` and `I(x^2)` both in the threshold moderation). Such
+  models were only warned about, with a message suggesting identification
+  through the functional form; they are exactly unidentified. Patterns
+  identified only through moderated loadings now say so. Identification
+  errors and warnings have classes `"mofia_identification_error"` and
+  `"mofia_identification_warning"` and carry a data frame `$issues`; the
+  warnings are also stored in `model$identification_issues`.
+* Cases with missing moderator values and cases without any observed item
+  response are both removed before moderator types, standardization and
+  data-dependent formula terms are determined, so that these describe exactly
+  the fitted cases (a case without responses could change the standardization
+  or the classification of a moderator).
+* `mofia_model()` records which input rows were fitted (`$cases`: positions,
+  row names, number of input rows and the excluded rows of both kinds).
+  `mofia_scores()` and `predict()` keep the number and type of their rows, but
+  now carry the row names of the data and attribute `"row_index"` (positions
+  in the data or in `newdata`); posterior covariance arrays are named likewise.
+* `mofia(threads = n)` with `n > 1` on a build without OpenMP support says that
+  it computes serially; the fit records requested and used threads in
+  `$threads`.
+* The citation year comes from the release date in DESCRIPTION, no longer from
+  the current date. The documentation states that threshold moderation is one
+  shift per item and moderator (no category-specific threshold moderation),
+  and how to install from the private repository.
+* New tests: the corrections above, and independent comparisons with lavaan
+  and mirt (when installed), a closed-form likelihood and `integrate()`. The
+  reference log-likelihood of the parabelief test is documented as a
+  regression baseline.
+
 # MoFIA 0.1.0
 
 ## Corrections after the second external review (7 November 2026)

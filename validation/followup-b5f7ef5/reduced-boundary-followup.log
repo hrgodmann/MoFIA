@@ -1,0 +1,32 @@
+Analytical reduced information:
+   p1 p2 p3
+p1  0  0  0
+p2  0  1  0
+p3  0  0  1
+Numerical reduced information entering .info_inverse:
+                     [,1]                   [,2]                   [,3]
+p1  5.387690293900960e-12 -3.876898801991047e-13 -1.615335643023741e-11
+p2 -3.876898801991047e-13  1.000000000005775e+00  1.477165612051579e-11
+p3 -1.615335643023741e-11  1.477165612051579e-11  1.000000000013102e+00
+Equilibrated status/eigenvalues:
+$status
+[1] "ok"
+
+$eigen
+     min      max 
+0.999993 1.000007 
+
+Resulting reduced covariance and scaling:
+NULL
+   exact  reduced 
+1.199389       NA 
+Original commit reduced covariance:
+NULL
+Original commit scaling:
+   exact  reduced 
+1.199389       NA 
+Follow-up: reduced information withheld by both old and corrected code.
+Common scaling using exact-information diagonal (demonstration):
+units 1,1,1 min 1.346923e-12 max 0.5 available FALSE 
+units 1,10000,1e-04 min 1.346923e-12 max 0.5 available FALSE 
+units -100,0.01,-1000 min 1.346923e-12 max 0.5 available FALSE 

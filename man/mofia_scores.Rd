@@ -10,10 +10,25 @@ mofia_scores(object)
 \item{object}{A fitted \code{mofia} object.}
 }
 \value{
-A data frame with one row per person (in the order of the fitted
-data) and, per factor, its EAP score and posterior SD (\verb{<factor>_sd}). For
-several factors, the posterior covariance matrices are attached as
-attribute \code{"cov"} (persons x factors x factors).
+A data frame with one row per fitted case (in the order of the
+fitted data) and, per factor, its EAP score and posterior SD
+(\verb{<factor>_sd}). Cases removed by \code{\link[=mofia_model]{mofia_model()}} (missing moderator
+values, no observed response) have no row. The row names are those of the
+fitted rows of the original data, and attribute \code{"row_index"} gives their
+positions in it (\code{model$cases}), so scores can be matched to the data by
+index rather than by position. Start from a full-length column of \code{NA}
+(also when reusing an existing column), so that excluded cases stay
+missing:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{data$score <- rep(NA_real_, nrow(data))
+data$score[attr(s, "row_index")] <- s$eta
+}\if{html}{\out{</div>}}
+
+For models created with MoFIA 0.1.0, which did not record the original
+positions, \code{"row_index"} is \code{NULL} (unknown) and the row names are those
+kept in the model, if any. For several factors, the posterior covariance
+matrices are attached as attribute \code{"cov"} (persons x factors x factors,
+the first dimension named like the rows).
 }
 \description{
 Expected a posteriori (EAP) factor scores: the posterior mean of each

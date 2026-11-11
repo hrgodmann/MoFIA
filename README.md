@@ -14,7 +14,10 @@ a common scale.
 * Binary, ordinal (logit or probit link), continuous and mixed items.
 * Moderation of loadings, thresholds/intercepts, residual variances, factor
   means, factor variances and factor correlations (Fisher-z or linear
-  covariance).
+  covariance). Threshold moderation is one shift per item and moderator,
+  shared by all thresholds of the item (uniform DIF; combined with loading
+  moderation it gives nonuniform DIF); category-specific threshold moderation
+  is not part of the model.
 * One or more factors (the cost of the quadrature grows exponentially with the
   number of factors; accuracy has been checked for up to three); variance or
   marker-item identification; missing item responses (full information,
@@ -45,8 +48,17 @@ a common scale.
 remotes::install_github("hrgodmann/MoFIA")
 ```
 
+While the GitHub repository is private, `install_github()` needs credentials
+with read access to it (a GitHub personal access token in the environment
+variable `GITHUB_PAT`, which `remotes` uses by default, or its `auth_token`
+argument). Without access, install from a local copy of the source, e.g.
+`remotes::install_local("path/to/MoFIA")` or `R CMD INSTALL path/to/MoFIA`.
+For reproducible results, install a fixed version (`ref = "<commit or tag>"`).
+
 A C++ compiler is needed (Rtools on Windows, the Xcode command line tools on
-macOS).
+macOS). Multithreading needs a compiler with OpenMP support; the default Apple
+clang on macOS has none, and the package then computes serially (`mofia()` says
+so when several threads are requested).
 
 ## Example
 

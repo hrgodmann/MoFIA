@@ -44,7 +44,13 @@
 #' (\eqn{g'A^{-1}g/2}), is below `1e-6`. If the information matrix is not
 #' positive definite, the fit is marked as not converged, `status` is
 #' `"saddle"` or `"singular"`, and standard errors and tests are not reported.
-#' With `se = FALSE` only the gradient is checked.
+#' Positive definiteness is judged on the information matrix scaled to unit
+#' diagonal (smallest eigenvalue relative to the largest, tolerance `1e-8`), so
+#' that it does not depend on the units of the parameters (e.g. a moderator in
+#' years and its square); the covariance matrices are transformed back to the
+#' parameters' units. Scaling removes differences in units, not near linear
+#' dependence among the parameters. With `se = FALSE` only the gradient is
+#' checked (maximum absolute gradient below `1e-3`, which does depend on units).
 #'
 #' @param model A `mofia_model` from [mofia_model()].
 #' @param link `"logit"` (default) or `"probit"` for categorical items.
@@ -63,12 +69,18 @@
 #' @param control List of control options passed to [stats::nlminb()].
 #' @param verbose Print progress?
 #' @param threads Number of threads for the likelihood (OpenMP, where
-#'   available). Default: `getOption("mofia.threads", 1)`.
+#'   available). Default: `getOption("mofia.threads", 1)`. If the package was
+#'   built without OpenMP support (for example with a compiler that lacks it),
+#'   more than one thread cannot be used: a message says so and the likelihood
+#'   is computed serially (`$threads` of the fit records requested and used
+#'   threads).
 #'
 #' @return An object of class `mofia` with components including
 #'   `coefficients`, `loglik`, `npar`, `nobs`, `converged`, `status` (`"ok"`,
 #'   `"saddle"` or `"singular"`), `information_eigen` (smallest and largest
-#'   eigenvalue of the information matrix), `quadrature` (log-likelihood at the
+#'   eigenvalue of the information matrix, in the parameters' units),
+#'   `information_eigen_scaled` (the same for the information matrix scaled to
+#'   unit diagonal, which `status` is based on), `threads`, `quadrature` (log-likelihood at the
 #'   estimates for the node counts compared), `newton_decrement`, `vcov` (a list
 #'   of covariance matrices), `scaling` (robust scaling correction factors),
 #'   `model`, `link` and `nq`.
@@ -100,6 +112,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   cont_only <- all(model$cont)
   if (cont_only) link <- "logit"   # irrelevant for continuous items
   if (!is.null(threads)) { old <- options(mofia.threads = threads); on.exit(options(old), add = TRUE) }
+  thr <- .thread_use()
   if (is.null(nq)) nq <- .default_nq(model$D, continuous = cont_only)
   starts <- max(1L, as.integer(starts))
   call <- match.call()
@@ -165,7 +178,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
               gradient = g, max_abs_grad = max(abs(g)), converged = max(abs(g)) < 1e-3,
               newton_decrement = NA_real_, optimizer = list(convergence = opt$convergence, message = opt$message,
               iterations = opt$iterations, outer_iterations = outer),
-              link = link, nq = nq, quadrature = quad, adapt = adapt, time = unname(proc.time()[[3]] - t0),
+              link = link, nq = nq, quadrature = quad, adapt = adapt, time = unname(proc.time()[[3]] - t0), threads = thr,
               starts = if (starts > 1) data.frame(start = seq_len(starts), logLik = lls) else NULL,
               model = model, call = call)
   class(fit) <- "mofia"
@@ -175,6 +188,16 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
             if (is.finite(fit$newton_decrement)) paste0(", Newton decrement = ", signif(fit$newton_decrement, 3)), ").",
             call. = FALSE)
   fit
+}
+
+# threads requested (option mofia.threads / argument threads) and threads the build
+# can use: without OpenMP support the likelihood is computed serially, which is said
+# rather than silently ignoring the request
+.thread_use <- function() {
+  req <- .mofia_threads(); omp <- mofia_openmp_threads()
+  if (req > 1 && omp < 1)
+    message(sprintf("This build of MoFIA has no OpenMP support: %d threads were requested, the likelihood is computed serially.", req))
+  c(requested = req, openmp = omp, used = if (omp < 1) 1L else req)
 }
 
 # one optimization run from a given start (outer loop re-adapts the quadrature)
@@ -225,8 +248,57 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
 
 # ---- standard errors -----------------------------------------------------------
 # Relative eigenvalue threshold below which the information matrix counts as
-# singular (min eigenvalue / max eigenvalue); negative beyond it: saddle point.
+# singular (min eigenvalue / max eigenvalue of the equilibrated matrix, see
+# .info_inverse()); negative beyond it: saddle point.
 .pd_tol <- 1e-8
+
+# Positive-definiteness classification and inverse of a symmetric information-type
+# matrix that do not depend on the units of the parameters. With s = sqrt(|diag(I)|)
+# (1 where the diagonal is 0), the equilibrated matrix C = I / (s s') has the same
+# inertia as I (Sylvester's law), so a positive diagonal change of parameter units
+# changes neither the classification nor the inverse, I^-1 = C^-1 / (s s'). The
+# spectrum of C is compared with the relative tolerance: "ok" (positive definite),
+# "saddle" (clearly negative eigenvalue) or "singular" (otherwise, including
+# non-finite entries). Equilibration removes differences in units, not near linear
+# dependence: an exact or numerical rank deficiency stays visible in C.
+#
+# 'scale' gives the reference scale explicitly (instead of the matrix's own diagonal).
+# The reduced information is I_exact + (constraint curvature): where these cancel, the
+# reduced diagonal is rounding and finite-difference noise, which its own diagonal would
+# blow up to 1 and present as information. It is therefore scaled by the diagonal of
+# the exact information, which transforms with the parameter units in the same way
+# (s -> |d| s), so the decision stays unit-invariant while a reduced matrix that has
+# lost (almost) all information in some direction relative to the exact one is
+# reported as singular.
+.info_inverse <- function(I, tol = .pd_tol, scale = NULL) {
+  out <- list(status = "singular", eigen = c(min = NA_real_, max = NA_real_), s = NULL, Cinv = NULL, inverse = NULL)
+  if (!is.matrix(I) || !length(I) || !all(is.finite(I))) return(out)
+  I <- (I + t(I)) / 2
+  s <- if (is.null(scale)) sqrt(abs(diag(I))) else scale
+  if (length(s) != nrow(I) || !all(is.finite(s))) return(out)
+  s[s == 0] <- 1
+  e <- eigen(I / outer(s, s), symmetric = TRUE)
+  ev <- e$values; out$eigen <- c(min = min(ev), max = max(ev))
+  thr <- tol * max(abs(ev))
+  if (min(ev) > thr) {
+    Ci <- e$vectors %*% (t(e$vectors) / ev); Ci <- (Ci + t(Ci)) / 2
+    V <- Ci / outer(s, s); dimnames(V) <- dimnames(I)
+    out$status <- "ok"; out$s <- s; out$Cinv <- Ci; out$inverse <- V
+  } else if (min(ev) < -thr) out$status <- "saddle"
+  out
+}
+
+# central-difference step for each parameter: relative to the parameter, and for
+# moderation effects relative to the scale of their moderator (a coefficient of a
+# moderator measured in large units, e.g. age^2 in years, lives on a small scale)
+.fd_steps <- function(theta, model) {
+  base <- rep(1, length(theta)); q <- model$par$mod
+  if (model$Q && any(!is.na(q))) {
+    rms <- sqrt(colMeans(model$X^2))
+    base[!is.na(q)] <- pmin(1, 1 / rms[q[!is.na(q)]])
+  }
+  1e-5 * pmax(base, abs(theta))
+}
 
 .mofia_se <- function(fit, check = TRUE) {
   model <- fit$model; theta <- fit$coefficients; link <- fit$link; adapt <- fit$adapt
@@ -235,7 +307,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   S <- attr(ll, "scores")
   # observed information: central differences of the analytic gradient
   gfun <- function(th) colSums(attr(.mofia_ll(th, model, link, nodes, scores = TRUE, adapt = adapt), "scores"))
-  np <- length(theta); h <- 1e-5 * pmax(1, abs(theta)); H <- matrix(0, np, np)
+  np <- length(theta); h <- .fd_steps(theta, model); H <- matrix(0, np, np)
   for (k in seq_len(np)) {
     e <- replace(numeric(np), k, h[k])
     H[, k] <- (gfun(theta + e) - gfun(theta - e)) / (2 * h[k])
@@ -248,37 +320,43 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   I_red <- -H + .constraint_curvature(theta, model, W)
   g <- colSums(S)
 
-  # curvature: a maximum needs a positive-definite information matrix
+  # curvature: a maximum needs a positive-definite information matrix. The decision
+  # uses the equilibrated matrix (independent of parameter units, see .info_inverse);
+  # the raw spectrum is kept as a diagnostic.
+  dimnames(I_exact) <- dimnames(I_red) <- dn
+  ex <- .info_inverse(I_exact)
   ev <- if (all(is.finite(I_exact))) eigen(I_exact, symmetric = TRUE, only.values = TRUE)$values else NA_real_
   fit$information_eigen <- c(min = min(ev), max = max(ev))
-  pd <- all(is.finite(ev)) && min(ev) > .pd_tol * max(abs(ev))
-  fit$status <- if (pd) "ok" else if (all(is.finite(ev)) && min(ev) < -.pd_tol * max(abs(ev))) "saddle" else "singular"
+  fit$information_eigen_scaled <- ex$eigen
+  pd <- identical(ex$status, "ok")
+  fit$status <- ex$status
   if (check && !pd) {
     fit$converged <- FALSE; fit$vcov <- NULL; fit$scaling <- NULL; fit$newton_decrement <- NA_real_
     fit$se_note <- if (fit$status == "saddle")
-      sprintf("the solution is a saddle point, not a maximum (smallest information eigenvalue %.3g)", min(ev))
-    else sprintf("the information matrix is singular (smallest eigenvalue %.3g, largest %.3g): the model is not identified, or not identified by these data",
-                 min(ev), max(ev))
+      sprintf("the solution is a saddle point, not a maximum (smallest eigenvalue of the scaled information matrix %.3g)", ex$eigen[["min"]])
+    else sprintf(paste0("the information matrix is singular (smallest eigenvalue of the scaled information matrix %.3g, ",
+                        "largest %.3g): the model is not identified, or not identified by these data"),
+                 ex$eigen[["min"]], ex$eigen[["max"]])
     warning("Standard errors and tests are not available: ", fit$se_note, ". ",
             if (fit$status == "saddle") "Try other starting values (starts > 1)." else "Check the anchor items.",
             call. = FALSE)
     return(fit)
   }
 
-  inv_pd <- function(I) {
-    e <- eigen(I, symmetric = TRUE)
-    if (!all(is.finite(e$values)) || min(e$values) <= .pd_tol * max(abs(e$values))) return(NULL)
-    V <- e$vectors %*% (t(e$vectors) / e$values); V <- (V + t(V)) / 2; dimnames(V) <- dn; V
+  # sandwich, scaling factor and Newton decrement in equilibrated coordinates, then
+  # back to the parameter units: A^-1 B A^-1 = (C^-1 (B/ss') C^-1) / ss'
+  sandwich <- function(e) if (is.null(e$inverse)) NULL else {
+    Ci <- e$Cinv; V <- Ci %*% (B / outer(e$s, e$s)) %*% Ci; V <- (V + t(V)) / 2 / outer(e$s, e$s)
+    dimnames(V) <- dn; V
   }
-  sandwich <- function(Ai) if (is.null(Ai)) NULL else { V <- Ai %*% B %*% Ai; (V + t(V)) / 2 }
-  A_exact <- inv_pd(I_exact); A_red <- inv_pd(I_red)
-  fit$vcov <- list(exact = list(ML = A_exact, MLR = sandwich(A_exact)),
-                   reduced = if (is.null(A_red)) NULL else list(ML = A_red, MLR = sandwich(A_red)),
-                   MLF = inv_pd(B))
-  fit$scaling <- c(exact = if (is.null(A_exact)) NA_real_ else sum(diag(A_exact %*% B)) / np,
-                   reduced = if (is.null(A_red)) NA_real_ else sum(diag(A_red %*% B)) / np)
+  trace_AB <- function(e) if (is.null(e$inverse)) NA_real_ else sum(e$Cinv * (B / outer(e$s, e$s))) / np
+  red <- .info_inverse(I_red, scale = sqrt(abs(diag(I_exact))))
+  fit$vcov <- list(exact = list(ML = ex$inverse, MLR = sandwich(ex)),
+                   reduced = if (is.null(red$inverse)) NULL else list(ML = red$inverse, MLR = sandwich(red)),
+                   MLF = .info_inverse(B)$inverse)
+  fit$scaling <- c(exact = trace_AB(ex), reduced = trace_AB(red))
   fit$information <- "exact"
-  fit$newton_decrement <- if (is.null(A_exact)) NA_real_ else 0.5 * sum(g * (A_exact %*% g))
+  fit$newton_decrement <- if (is.null(ex$inverse)) NA_real_ else { gs <- g / ex$s; 0.5 * sum(gs * (ex$Cinv %*% gs)) }
   fit$converged <- pd && is.finite(fit$newton_decrement) && fit$newton_decrement < 1e-6
   fit
 }

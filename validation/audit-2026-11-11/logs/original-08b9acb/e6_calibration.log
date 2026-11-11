@@ -1,0 +1,31 @@
+N = 250, 1000/1000 replications ok, 76 s
+                   truth mean_est rel_bias emp_sd cover_ML cover_MLR
+lambda0[y1,eta]      1.5    1.517    0.011  0.279    0.944     0.949
+lambda0[y2,eta]      1.2    1.224    0.020  0.225    0.952     0.956
+lambda1[y2,eta,x1]   0.3    0.300    0.001  0.183    0.946     0.948
+gamma[eta,x1]        0.3    0.305    0.015  0.093    0.956     0.963
+gamma[eta,x2]       -0.4   -0.395   -0.012  0.182    0.946     0.957
+delta[eta,x1]        0.2    0.213    0.067  0.168    0.934     0.941
+delta[eta,x2]        0.3    0.303    0.009  0.296    0.937     0.939
+beta[y4,x1]          0.0   -0.002       NA  0.192    0.953     0.947
+beta[y4,x2]          0.0    0.007       NA  0.346    0.956     0.959
+Rejection rate at alpha = .05 (null true; MC SE ~ 0.007 ):
+      wald lrt_scaled        lrt  score_MLR   score_ML 
+     0.045      0.054      0.058      0.048      0.057 
+mean scaling factor c0: 1.009  all converged: TRUE 
+N = 1000, 1000/1000 replications ok, 181 s
+                   truth mean_est rel_bias emp_sd cover_ML cover_MLR
+lambda0[y1,eta]      1.5    1.502    0.001  0.131    0.953     0.954
+lambda0[y2,eta]      1.2    1.206    0.005  0.112    0.935     0.939
+lambda1[y2,eta,x1]   0.3    0.300   -0.002  0.083    0.948     0.946
+gamma[eta,x1]        0.3    0.302    0.008  0.046    0.941     0.945
+gamma[eta,x2]       -0.4   -0.402    0.005  0.085    0.959     0.957
+delta[eta,x1]        0.2    0.204    0.018  0.076    0.950     0.946
+delta[eta,x2]        0.3    0.304    0.013  0.143    0.943     0.945
+beta[y4,x1]          0.0    0.001       NA  0.084    0.950     0.954
+beta[y4,x2]          0.0   -0.002       NA  0.165    0.943     0.945
+Rejection rate at alpha = .05 (null true; MC SE ~ 0.007 ):
+      wald lrt_scaled        lrt  score_MLR   score_ML 
+     0.054      0.057      0.056      0.052      0.057 
+mean scaling factor c0: 1.002  all converged: TRUE 
+

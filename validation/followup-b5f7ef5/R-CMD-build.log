@@ -1,0 +1,18 @@
+* checking for file ‘/Users/henrikgodmann/Desktop/GitHub/MoFIA/DESCRIPTION’ ... OK
+* preparing ‘MoFIA’:
+* checking DESCRIPTION meta-information ... OK
+* cleaning src
+* installing the package to build vignettes
+* creating vignettes ... OK
+* cleaning src
+* checking for LF line-endings in source and make files and shell scripts
+* checking for empty or unneeded directories
+Removed empty directory ‘MoFIA/inst/examples/comparisons/MPLUS’
+Removed empty directory ‘MoFIA/inst/examples/comparisons/MoFIA’
+Removed empty directory ‘MoFIA/inst/examples/comparisons/datasets’
+Removed empty directory ‘MoFIA/inst/examples/comparisons/openMX’
+Removed empty directory ‘MoFIA/inst/examples/comparisons’
+Removed empty directory ‘MoFIA/inst/examples’
+Removed empty directory ‘MoFIA/tests/testthat/_snaps’
+* building ‘MoFIA_0.1.0.9000.tar.gz’
+

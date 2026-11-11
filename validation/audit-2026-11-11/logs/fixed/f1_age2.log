@@ -1,0 +1,9 @@
+raw: status ok converged TRUE raw eig 0.07278673 3633099721 scaled eig 0.001068832 3.736923 
+std: status ok converged TRUE 
+logLik raw -3241.373870 std -3241.373870 diff -1.19e-08
+max |g(theta_raw) - theta_std| = 6.70e-05
+ML: max relative SE difference (J V_raw J' vs V_std) = 3.01e-05
+MLR: max relative SE difference (J V_raw J' vs V_std) = 4.07e-05
+scaling factors raw 1.013902 std 1.013901; Newton decrement raw 2.88e-08 std 1.45e-08
+Wald Male DIF raw 7.413209 std 7.413414
+Wald all DIF raw 25.144071 std 25.144077

@@ -47,7 +47,11 @@ invariant parameters; here `SpiritsGhosts` serves as the anchor. Without an
 anchor, a moderated factor mean cannot be told apart from equal threshold
 shifts of all items (and a moderated factor variance from equal changes of all
 loadings); `mofia_model()` refuses such exactly unidentified models and warns
-about weakly identified ones. We fit three nested models:
+about weakly identified ones. Moderated loadings do not rescue a model without
+anchor: for a binary moderator, the products of loading and mean moderation are
+again shifts that the thresholds absorb, so the model stays unidentified. Note
+also that threshold moderation is one shift per item and moderator, shared by
+all thresholds of the item. We fit three nested models:
 
 * **scalar**: no item parameter is moderated;
 * **metric**: the thresholds of all items except the anchor are moderated;
@@ -212,6 +216,9 @@ m2 <- mofia_model(parabelief, loadings = list(EHA = eha, UB = ub),
                   threshold_mod = TRUE, mean_mod = FALSE, cor_mod = TRUE)
 fit2 <- mofia(m2, threads = 4)
 ```
+
+Several threads need a build with OpenMP support (not the default Apple clang on
+macOS); otherwise `mofia()` says so and computes serially.
 
 With three or more factors, moderated correlations are refused by default:
 pairwise moderated correlations need not form a valid correlation matrix for all

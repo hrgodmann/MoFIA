@@ -1,0 +1,47 @@
+MoFIA 0.1.0 from /private/tmp/claude-501/-Users-henrikgodmann-Desktop-GitHub-MoFIA/3d71ba82-bb63-4d2d-bfce-33d6a8fa0eb2/scratchpad/lib/MoFIA 
+
+== test-review3.R ==
+ test                                                                                      
+ R1: information classification and inverse do not depend on parameter units               
+ R1: a moderator in other units gives the same fit, transformed covariances and tests      
+ R1: age in years and its square match the standardized model after transformation         
+ R1: a truly unidentified model is still reported as singular                              
+ R1: score tests flag candidates without information given the model, in any units         
+ R2: mean + all thresholds + loadings by the same binary moderator is refused (exact alias)
+ R2: the refused patterns are exact likelihood invariances                                 
+ R2: weakly identified and identified patterns are not refused                             
+ R2: cross-loadings are checked per factor                                                 
+ R3: original row positions and names are kept through both exclusions and rebuilds        
+ R3: scores and predictions carry the identities of their rows                             
+ R3: posterior covariance rows are named like the score rows (two factors)                 
+ R4: moderator classification and standardization use only the fitted cases                
+ R5: requested threads are reported, and give the same result where OpenMP is available    
+ R5: the citation year comes from release metadata, not the current date                   
+ nb failed result
+ 12 0      pass  
+ 15 0      pass  
+  8 0      pass  
+  4 0      pass  
+  4 0      pass  
+ 10 0      pass  
+  8 0      pass  
+ 13 0      pass  
+  3 0      pass  
+ 10 0      pass  
+ 18 0      pass  
+  2 0      pass  
+ 10 0      pass  
+  5 0      SKIP  
+  3 0      pass  
+
+== test-comparisons.R ==
+ test                                                                                   
+ continuous items, binary moderator: same fit and ML/MLR SEs as lavaan multigroup       
+ ordinal items, binary moderator: same fit as mirt multipleGroup (graded)               
+ continuous items, continuous moderators, two factors: likelihood equals the closed form
+ ordinal items, continuous moderators: likelihood equals adaptive integrate()           
+ nb failed result
+ 9  0      pass  
+ 6  0      pass  
+ 2  0      pass  
+ 2  0      pass  

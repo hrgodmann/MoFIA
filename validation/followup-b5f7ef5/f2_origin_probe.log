@@ -1,0 +1,15 @@
+ [warning: identified_by_loading_moderation ]continuous x, origin 0 : no issue 
+ [warning: identified_by_loading_moderation ]continuous x, origin 10000 : no issue 
+ [warning: identified_by_loading_moderation ]continuous x, origin 1e+09 : no issue 
+x + I(x^2), origin 0 : ERROR not_identified x 
+x + I(x^2), origin 10000 : ERROR not_identified x 
+binary coded 0 1 : ERROR not_identified zz 
+binary coded 1 2 : ERROR not_identified zz 
+binary coded 0 1000 : ERROR not_identified zz 
+binary coded -50000 -49999 : ERROR not_identified zz 
+binary coded 1e+09 1e+09 : ERROR not_identified zz 
+binary interaction, offset 1e4: ERROR not_identified z2, a2, z2:a2 
+ [warning: identified_by_loading_moderation ]binary mean, loading by far-origin continuous x: no issue 
+ [warning: identified_by_loading_moderation ]binary mean+DIF, loadings by z and a (a not in thresholds): no issue 
+anchor: no issue 
+no mean: no issue 

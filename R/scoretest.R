@@ -80,8 +80,9 @@ mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item")
   p0 <- names(fit$coefficients)
   # columns of the Hessian in the candidate directions (central differences of the analytic gradient)
   H <- matrix(0, length(th), length(candidates), dimnames = list(names(th), candidates))
+  hs <- stats::setNames(.fd_steps(th, ext), names(th))
   for (a in candidates) {
-    h <- 1e-5; e <- stats::setNames(numeric(length(th)), names(th)); e[a] <- h
+    h <- hs[[a]]; e <- stats::setNames(numeric(length(th)), names(th)); e[a] <- h
     H[, a] <- (colSums(sc(th + e)) - colSums(sc(th - e))) / (2 * h)
   }
   A00inv <- fit$vcov$exact$ML[p0, p0]
@@ -95,11 +96,22 @@ mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item")
     Ut <- U[a] - drop(K %*% U[p0])
     Dm <- cbind(-K, diag(length(a)))
     V <- Dm %*% B[c(p0, a), c(p0, a)] %*% t(Dm)
-    if (min(eigen(M, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8 * max(1, abs(diag(Aaa[a, a, drop = FALSE]))))
-      return(c(df = length(a), MLR = NA_real_, ML = NA_real_, epc = NA_real_))   # not identified given the model
-    T_ml <- tryCatch(drop(t(Ut) %*% solve(M, Ut)), error = function(e) NA_real_)
-    T_r <- tryCatch(drop(t(Ut) %*% solve(V, Ut)), error = function(e) NA_real_)
-    epc <- if (length(a) == 1) tryCatch(drop(solve(M, Ut)), error = function(e) NA_real_) else NA_real_
+    # Identification of the candidates given the fitted parameters: the information
+    # left after conditioning (M) relative to the candidates' own information (Aaa),
+    # i.e. M scaled by sqrt(diag(Aaa)), not by its own diagonal (which would hide a
+    # candidate whose information is all explained by the fitted parameters). The
+    # ratio does not depend on the units of the candidates or of the fitted parameters.
+    na <- c(df = length(a), MLR = NA_real_, ML = NA_real_, epc = NA_real_)
+    sa <- diag(Aaa[a, a, drop = FALSE])
+    if (!all(is.finite(M)) || !all(is.finite(sa) & sa > 0)) return(na)
+    sa <- sqrt(sa); ss <- outer(sa, sa)
+    Ms <- M / ss; Ms <- (Ms + t(Ms)) / 2
+    if (min(eigen(Ms, symmetric = TRUE, only.values = TRUE)$values) <= 1e-8)
+      return(na)                                               # not identified given the model
+    Us <- Ut / sa; Vs <- V / ss
+    T_ml <- tryCatch(drop(t(Us) %*% solve(Ms, Us)), error = function(e) NA_real_)
+    T_r <- tryCatch(drop(t(Us) %*% solve(Vs, Us)), error = function(e) NA_real_)
+    epc <- if (length(a) == 1) tryCatch(drop(solve(Ms, Us)) / sa, error = function(e) NA_real_) else NA_real_
     c(df = length(a), MLR = unname(T_r), ML = unname(T_ml), epc = unname(epc))
   })
   lab <- if (by == "parameter") candidates else names(groups)
