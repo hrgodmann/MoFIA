@@ -1,0 +1,58 @@
+PASS 01 information status under 1,1,1
+PASS 02 exact ML back transform
+PASS 03 exact MLR back transform
+PASS 04 exact trace scaling
+PASS 05 reduced ML back transform
+PASS 06 reduced MLR back transform
+PASS 07 reduced trace scaling
+PASS 08 MLF back transform
+PASS 09 Newton decrement
+PASS 10 Newton convergence
+PASS 11 information status under 1,10000,1e-04
+PASS 12 exact ML back transform
+PASS 13 exact MLR back transform
+PASS 14 exact trace scaling
+PASS 15 reduced ML back transform
+PASS 16 reduced MLR back transform
+PASS 17 reduced trace scaling
+PASS 18 MLF back transform
+PASS 19 Newton decrement
+PASS 20 Newton convergence
+PASS 21 information status under -100,0.01,-1000
+PASS 22 exact ML back transform
+PASS 23 exact MLR back transform
+PASS 24 exact trace scaling
+PASS 25 reduced ML back transform
+PASS 26 reduced MLR back transform
+PASS 27 reduced trace scaling
+PASS 28 MLF back transform
+PASS 29 Newton decrement
+PASS 30 Newton convergence
+PASS 31 singular reduced information stays unavailable
+PASS 32 singular reduced scaling stays unavailable
+PASS 33 exact covariance remains available when reduced unavailable
+PASS 34 true singular matrix rejected
+PASS 35 true singular matrix rejected
+PASS 36 true singular matrix rejected
+PASS 37 indefinite matrix rejected
+PASS 38 indefinite matrix rejected
+PASS 39 nonfinite matrix rejected
+PASS 40 actual Wald function invariant under units/sign
+PASS 41 actual Wald function invariant under units/sign
+PASS 42 actual Wald function invariant under units/sign
+PASS 43 actual score robust single unit invariance
+PASS 44 actual score ML single unit invariance
+PASS 45 score EPC back transform
+PASS 46 actual score robust group unit invariance
+PASS 47 actual score ML group unit invariance
+PASS 48 actual score robust single unit invariance
+PASS 49 actual score ML single unit invariance
+PASS 50 score EPC back transform
+PASS 51 actual score robust group unit invariance
+PASS 52 actual score ML group unit invariance
+PASS 53 conditional alias score test unavailable under rescaling
+PASS 54 conditional alias score test unavailable under rescaling
+LIMIT zero-diagonal indefinite matrix status: singular rescaled: saddle (both withhold inverse)
+LIMIT finite difference predictor displacement at X scales 1 and 1e-4: 1e-05 1e-09 
+TOTAL 54 passed; 0 failed; no engine fits or simulations run
+R 4.5.3 aarch64-apple-darwin20 

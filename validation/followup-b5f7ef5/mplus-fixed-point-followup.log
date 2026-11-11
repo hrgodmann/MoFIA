@@ -1,0 +1,27 @@
+Subject commit: 2ce8b51a5739640f1cd6e828246361648dd007fa | R/ clean: TRUE 
+R: R version 4.5.3 (2026-03-11) 
+Compiled backend: /Users/henrikgodmann/Library/Caches/org.R-project.R/R/renv/library/jaspSem-a86347ba/macos/R-4.5/aarch64-apple-darwin20/MoFIA 
+$Version
+[1] "0.1.0"
+
+$<NA>
+NULL
+
+$Built
+[1] "R 4.5.3; aarch64-apple-darwin20; 2026-11-10 01:55:52 UTC; unix"
+
+C++ source unchanged between review base and subject; R code sourced by revision.
+base status ok converged TRUE loglik -3691.0095275777958 scaling 0.97518418642645055 0.97885546179665373 
+fixed status ok converged TRUE loglik -3691.0095275777958 scaling 0.97518418642645177 0.97885546179665539 
+New vs base exact_ML covariance max absolute 1.9081958235744878e-16 SE max relative 4.4408920985006262e-15 
+Reconstructed base vs retained exact_ML max covariance difference 6.4664940069292243e-13 
+New vs base exact_MLR covariance max absolute 3.5041414214731503e-16 SE max relative 8.7707618945387367e-15 
+Reconstructed base vs retained exact_MLR max covariance difference 8.5345619460497346e-13 
+New vs base reduced_ML covariance max absolute 5.0653925498522767e-16 SE max relative 1.7097434579227411e-14 
+New vs base reduced_MLR covariance max absolute 1.0894063429134349e-15 SE max relative 3.6193270602780103e-14 
+Reconstructed base vs retained reduced_MLR max covariance difference 1.144369321526284e-12 
+Saved Mplus vs fixed ML unique covariance entries 741 max covariance difference 1.3901845605885851e-07 max SE difference 4.3889885414927221e-07 
+Saved Mplus vs fixed MLR unique covariance entries 741 max covariance difference 3.8529707695189597e-07 max SE difference 1.0517733101678139e-06 
+MLR scaling difference from Mplus printed 0.9752: -1.5813573548184578e-05 
+PASS: fixed-point B08 exact/reduced regression and saved-Mplus exact ML/MLR comparison.
+Not a refit, new Mplus execution, or JASP whole-chain Check 3.
