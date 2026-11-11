@@ -1,3 +1,0 @@
-# scripts/cmp_old_new.R run with the original (08b9acb) and the corrected package; differences corrected - original
-model 1 (~ Age * Male + I(Age^2), DIF Aliens/Sorcery, loading Aliens): status ok/ok dlogLik 0.0e+00 max|dcoef| 0.0e+00 ML max rel dSE 1.5e-10 MLR max rel dSE 2.5e-10 MLF max rel dSE 4.2e-14 dscaling 3.4e-12
-model 2 (Age, Male standardized, DIF DevilPossession):              status ok/ok dlogLik 0.0e+00 max|dcoef| 0.0e+00 ML max rel dSE 2.0e-14 MLR max rel dSE 4.1e-14 MLF max rel dSE 6.9e-15 dscaling 2.4e-15

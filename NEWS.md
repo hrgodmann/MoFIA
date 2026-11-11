@@ -1,6 +1,6 @@
 # MoFIA 0.1.0.9000
 
-## Corrections after the review of the engine fixes (11 November 2026)
+## Numerical stability and compatibility
 
 * The reduced information matrix is judged and inverted on the scale of the
   exact information's diagonal, not its own: where the constraint curvature
@@ -21,7 +21,7 @@
 * The documented way to attach scores to the data starts from a full-length
   `NA` column, so excluded cases (also trailing ones) stay missing.
 
-## Corrections after the engine review (11 November 2026)
+## Inference and data handling
 
 * Positive definiteness of the information matrix (status `"ok"`, `"saddle"`
   or `"singular"`) is judged on the matrix scaled to unit diagonal, and all
@@ -71,7 +71,7 @@
 
 # MoFIA 0.1.0
 
-## Corrections after the second external review (7 November 2026)
+## Numerical accuracy and prediction
 
 * Quadrature accuracy is checked after every fit: the log-likelihood at the
   estimates is recomputed with a finer rule, and the model is refitted with the
@@ -97,7 +97,7 @@
   cross-loading items, and no longer print a note about standard errors.
 * `mofia_scores()` works with the R reference engine.
 
-## Corrections after the external review (7 November 2026)
+## Inference and input validation
 
 * Robust (MLR) standard errors, scaled likelihood-ratio tests and Wald tests now
   use the exact observed information by default. The "reduced" information

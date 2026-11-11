@@ -1,3 +1,0 @@
-=== E1: binary moderator; mean + all thresholds + all loadings moderated by Male, var fixed ===
-Error: The model is not identified: the mean of factor 'eta' and the thresholds/intercepts of all its items depend on 'Male', and a shift of this mean is offset exactly by shifts of all items' thresholds/intercepts (the moderated loadings do not help: their products with these moderators are absorbed as well, e.g. z * z = z for a binary z). Keep at least one anchor item per factor whose parameters do not depend on that moderator, or drop the factor-level moderation (mean_mod / var_mod).
-Execution halted
