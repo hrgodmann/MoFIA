@@ -41,7 +41,11 @@ in \verb{$starts}. Useful when a model may have several local maxima.}
 \item{verbose}{Print progress?}
 
 \item{threads}{Number of threads for the likelihood (OpenMP, where
-available). Default: \code{getOption("mofia.threads", 1)}.}
+available). Default: \code{getOption("mofia.threads", 1)}. If the package was
+built without OpenMP support (for example with a compiler that lacks it),
+more than one thread cannot be used: a message says so and the likelihood
+is computed serially (\verb{$threads} of the fit records requested and used
+threads).}
 
 \item{accuracy}{Tolerance of the quadrature check (log-likelihood units), or
 \code{NULL} to skip the check. See \emph{Quadrature}.}
@@ -50,7 +54,9 @@ available). Default: \code{getOption("mofia.threads", 1)}.}
 An object of class \code{mofia} with components including
 \code{coefficients}, \code{loglik}, \code{npar}, \code{nobs}, \code{converged}, \code{status} (\code{"ok"},
 \code{"saddle"} or \code{"singular"}), \code{information_eigen} (smallest and largest
-eigenvalue of the information matrix), \code{quadrature} (log-likelihood at the
+eigenvalue of the information matrix, in the parameters' units),
+\code{information_eigen_scaled} (the same for the information matrix scaled to
+unit diagonal, which \code{status} is based on), \code{threads}, \code{quadrature} (log-likelihood at the
 estimates for the node counts compared), \code{newton_decrement}, \code{vcov} (a list
 of covariance matrices), \code{scaling} (robust scaling correction factors),
 \code{model}, \code{link} and \code{nq}.
@@ -103,7 +109,13 @@ log-likelihood gain still available from one more Newton step
 (\eqn{g'A^{-1}g/2}), is below \code{1e-6}. If the information matrix is not
 positive definite, the fit is marked as not converged, \code{status} is
 \code{"saddle"} or \code{"singular"}, and standard errors and tests are not reported.
-With \code{se = FALSE} only the gradient is checked.
+Positive definiteness is judged on the information matrix scaled to unit
+diagonal (smallest eigenvalue relative to the largest, tolerance \code{1e-8}), so
+that it does not depend on the units of the parameters (e.g. a moderator in
+years and its square); the covariance matrices are transformed back to the
+parameters' units. Scaling removes differences in units, not near linear
+dependence among the parameters. With \code{se = FALSE} only the gradient is
+checked (maximum absolute gradient below \code{1e-3}, which does depend on units).
 }
 
 \examples{

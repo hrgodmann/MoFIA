@@ -1,10 +1,16 @@
+# The year comes from the release metadata in DESCRIPTION (field Date, or
+# Date/Publication for a CRAN release), never from the current date, so that a
+# given version always has the same citation.
+year <- meta$Date
+if (is.null(year)) year <- meta$`Date/Publication`
+year <- if (is.null(year)) NULL else substr(year, 1, 4)
 bibentry(
   bibtype = "Manual",
   title = "{MoFIA}: Moderated Factor and Item Analysis",
   author = person("Henrik", "Godmann"),
-  year = format(Sys.Date(), "%Y"),
+  year = year,
   note = paste("R package version", meta$Version),
   url = "https://github.com/hrgodmann/MoFIA",
-  textVersion = paste0("Godmann, H. (", format(Sys.Date(), "%Y"), "). MoFIA: Moderated Factor and Item Analysis. ",
+  textVersion = paste0("Godmann, H. (", if (is.null(year)) "n.d." else year, "). MoFIA: Moderated Factor and Item Analysis. ",
                        "R package version ", meta$Version, ". https://github.com/hrgodmann/MoFIA")
 )

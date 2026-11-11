@@ -91,7 +91,23 @@ not guarantee a positive-definite correlation matrix for all moderator
 values, and this case is not methodologically established.}
 }
 \value{
-An object of class \code{mofia_model}.
+An object of class \code{mofia_model}. Among its components:
+\describe{
+\item{\code{cases}}{Which input rows were fitted: \code{index} (positions in
+\code{data}, in the order of the fitted cases), \code{names} (their row names),
+\code{n_input} (rows of \code{data}), \code{excluded_moderator} and
+\code{excluded_response} (positions of the cases removed for missing
+moderator values and for having no observed item response).}
+\item{\code{identification_issues}}{A data frame (columns \code{factor},
+\code{parameter}, \code{moderators}, \code{status}, \code{message}) of the patterns that are
+identified only weakly (\code{status} \code{"identified_by_loading_moderation"}
+or \code{"identified_by_functional_form"}); empty if there are none. The
+same data frame is attached as \verb{$issues} to the warning (class
+\code{"mofia_identification_warning"}) and, for exactly unidentified
+patterns (\code{status} \code{"not_identified"}), to the error (class
+\code{"mofia_identification_error"}), so that callers can handle them
+without parsing messages.}
+}
 }
 \description{
 Sets up a moderated (nonlinear) factor model: which items load on which
@@ -116,6 +132,10 @@ and a moderator shift \eqn{\nu_{ij} = x_i'\beta_j}. For a categorical item
 \deqn{P(y_{ij} \ge k \mid \eta_i) = F(\nu_{ij} + \lambda_{ij}'\eta_i - \tau_{jk}),}
 with \eqn{F} the logistic or standard normal distribution function, so a
 positive \eqn{\beta} shifts all thresholds of the item down (uniform DIF).
+The shift is the same for all thresholds of an item: the spacing of the
+thresholds does not depend on the moderators. Category-specific threshold
+moderation is not part of the model, and tests of \eqn{\beta} (Wald,
+likelihood-ratio, score) do not test that larger alternative.
 A continuous item is normal with mean \eqn{\nu_{0j} + \nu_{ij} + \lambda_{ij}'\eta_i}
 and residual variance \eqn{\exp(\omega_{0j} + x_i'\omega_j)}.
 }
@@ -150,11 +170,23 @@ thresholds/intercepts of \emph{all} its items depend on the same moderator, a
 shift of the factor mean cannot be told apart from equal shifts of all
 items; likewise for the factor variance and \emph{all} loadings. Keep at least
 one anchor item per factor and moderator whose parameters are not moderated.
-Patterns that are exactly unidentified are refused with an error; patterns
-identified only through the functional form of the moderation (for example,
+
+Patterns that are exactly unidentified are refused with an error. For the
+factor mean this includes models whose loadings are moderated as well, when
+the products of the loading moderators with the mean moderators are
+themselves absorbed by the threshold moderation: for a binary moderator
+\eqn{z}, \eqn{\gamma \to \gamma + c} and
+\eqn{\beta_j \to \beta_j - c(\lambda_{0j} + \lambda_{1j})} leave the
+likelihood unchanged because \eqn{z^2 = z} (likewise for binary moderators
+and all their interactions, or for \code{x} and \code{I(x^2)} both moderating the
+thresholds). Patterns identified only through the moderated loadings (a
+mean shift that is absorbed unless those loading effects are not zero), or
+only through the functional form of the moderation (for example,
 exponential variance against linear loadings for a continuous moderator)
-give a warning. \code{\link[=mofia]{mofia()}} additionally checks that the information matrix at
-the solution is positive definite. Which items are invariant is an
+give a warning. These checks look at each factor separately and are
+sufficient conditions, not a proof of identification: \code{\link[=mofia]{mofia()}}
+additionally checks that the information matrix at the solution is positive
+definite. Which items are invariant is an
 assumption: choosing anchors from the same data (for example with
 \code{\link[=mofia_score_test]{mofia_score_test()}}) and then testing on those data is a form of
 post-selection inference.

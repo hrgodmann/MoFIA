@@ -34,7 +34,10 @@ probabilities use an accurate one-dimensional rule.}
 \value{
 For \code{"expected"}, a persons x items matrix. For \code{"prob"}, a list with
 one persons x categories matrix per categorical item (continuous items are
-omitted). For \code{"scores"}, a data frame.
+omitted). For \code{"scores"}, a data frame. The rows are the fitted cases
+(without \code{newdata}) or the rows of \code{newdata}, in order; their row names
+are carried over, and attribute \code{"row_index"} gives the positions in the
+original data (fitted cases, see \code{\link[=mofia_scores]{mofia_scores()}}) or in \code{newdata}.
 }
 \description{
 Category probabilities and expected item scores implied by a fitted model

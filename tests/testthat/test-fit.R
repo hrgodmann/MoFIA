@@ -36,6 +36,12 @@ test_that("simulated data keep the original coding", {
   expect_equal(dim(attr(sim, "eta")), c(600, 1))
 })
 
+# Regression baseline: -8394.7028 is the log-likelihood MoFIA itself obtained for this
+# model when the test was added (first recorded in commit 4a5f73a, November 2026; the
+# software, version and script that produced it were not recorded). It guards against
+# unintended changes of the likelihood; it is not an independent comparison. The
+# independent comparisons (lavaan, mirt, closed form, integrate()) are in
+# test-comparisons.R.
 test_that("the paranormal-belief metric model reproduces its reference log-likelihood", {
   skip_on_cran()
   data(parabelief)
@@ -45,7 +51,7 @@ test_that("the paranormal-belief metric model reproduces its reference log-likel
   d <- parabelief; d$Age <- as.numeric(scale(d$Age))
   m <- mofia_model(d, loadings = list(EHA = eha, UB = ub), moderators = c("Age", "Male"),
                    threshold_mod = TRUE, mean_mod = FALSE, var_mod = TRUE, cor_mod = TRUE)
-  fit <- mofia(m, threads = 2)
+  fit <- suppressMessages(mofia(m, threads = 2))
   expect_lt(abs(fit$loglik + 8394.7028), 1e-3)
   expect_equal(fit$npar, 105)
 })

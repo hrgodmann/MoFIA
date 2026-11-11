@@ -154,10 +154,16 @@ mofia_wald <- function(fit, params, se = c("MLR", "ML", "MLF"), information = c(
   V <- vcov(fit, se, information)
   th <- fit$coefficients[idx]
   Vs <- V[idx, idx, drop = FALSE]
-  ev <- eigen(Vs, symmetric = TRUE, only.values = TRUE)$values
-  if (!all(is.finite(ev)) || min(ev) <= 1e-12 * max(abs(ev)))
+  # checked and solved on the correlation scale, so that the decision does not depend
+  # on the units of the tested parameters; the statistic is unit-free anyway
+  sv <- sqrt(diag(Vs))
+  if (!all(is.finite(Vs)) || !all(is.finite(sv) & sv > 0))
     stop("The covariance matrix of the tested parameters is not positive definite; no Wald test.", call. = FALSE)
-  W <- drop(t(th) %*% solve(Vs, th))
+  R <- Vs / outer(sv, sv); R <- (R + t(R)) / 2
+  ev <- eigen(R, symmetric = TRUE, only.values = TRUE)$values
+  if (min(ev) <= 1e-12 * max(abs(ev)))
+    stop("The covariance matrix of the tested parameters is not positive definite; no Wald test.", call. = FALSE)
+  W <- drop(t(th / sv) %*% solve(R, th / sv))
   data.frame(statistic = W, df = length(idx), p_value = stats::pchisq(W, length(idx), lower.tail = FALSE),
              parameters = paste(nms[idx], collapse = ", "))
 }
