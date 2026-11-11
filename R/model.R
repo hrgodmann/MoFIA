@@ -435,7 +435,10 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
   if (length(nf)) stop("Moderators must be finite numbers; not finite in: ", paste(nf, collapse = ", "), call. = FALSE)
   const <- colnames(X)[apply(X, 2, function(v) max(v) - min(v) == 0)]
   if (length(const)) stop("Constant moderator(s) (no variation in the data): ", paste(const, collapse = ", "), call. = FALSE)
-  q <- qr(cbind(1, X))
+  # rank with the intercept, on centred and scaled columns (same span): a moderator far
+  # from its origin (x = 10000 + small variation, with I(x^2)) is not taken for dependent
+  Xs <- sweep(X, 2, colMeans(X)); Xs <- sweep(Xs, 2, sqrt(colMeans(Xs^2)), "/")
+  q <- qr(cbind(1, Xs))
   if (q$rank < ncol(X) + 1) {
     dep <- colnames(X)[q$pivot[(q$rank + 1):(ncol(X) + 1)] - 1]
     stop("The moderators are linearly dependent (together with the intercept); remove: ",
@@ -548,27 +551,54 @@ mofia_model <- function(data, items = NULL, moderators = NULL, loadings = NULL, 
 # Moderators (indices into the columns of X) involved in a mean shift c != 0 of a
 # factor (supported on Md) that the items' thresholds/intercepts absorb exactly:
 # for every item j of the factor, X c (and, with products = TRUE, x_p * X c for the
-# moderators p of item j's loading) must lie in the column span of [1, X[, tm[j, ]]].
-# Solved as the null space of the stacked residuals; integer(0) if there is none.
+# moderators p of item j's loading) must lie in the column span S_j of
+# [1, X[, tm[j, ]]]. Solved as the null space of the stacked residuals; integer(0)
+# if there is none.
+#
+# Numerical conditioning. A moderator far from its origin (x = 10000 + small variation)
+# makes x * x nearly, but not exactly, a combination of 1 and x; measured against the
+# raw products such a residual is lost in rounding. The moderators are therefore
+# centred and scaled, x_q = m_q + s_q xs_q, which leaves every span containing the
+# intercept unchanged, and the products are expanded exactly. With b = s * c (the
+# shift in standardized units) and mu = m / s,
+#   X c = Xs b + mu'b,   x_p * (X c) / s_p = xs_p * (Xs b) + xs_p (mu'b) + (m_p / s_p) (X c).
+# The last term lies in S_j whenever X c does (the product-free condition, which is
+# also required), so the conditions are
+#   resid_j(Xs) b = 0   and   (resid_j(xs_p * Xs) + resid_j(xs_p) mu') b = 0.
+# All residuals are of standardized, well-conditioned vectors; resid_j(xs_p) is set
+# to exactly zero when xs_p lies in S_j (relative residual below 1e-10), so that a
+# large origin (mu) cannot magnify its rounding error. The rank is taken from the
+# singular values of the stacked, row-normalized conditions (no squaring), relative
+# to the size of the standardized products. An exact alias (zero up to rounding) is
+# thus told apart from a small but real residual, and the classification depends on
+# the origin and units of the moderators only through the actual model spaces (the
+# factor mean has no intercept, so its origin is part of the model).
 .mean_alias <- function(X, Md, on_d, tm, lm_d = NULL, products = TRUE, tol = 1e-8) {
-  XM <- X[, Md, drop = FALSE]
-  XM <- sweep(XM, 2, sqrt(colMeans(XM^2)), "/")              # c in moderator-free units
-  G <- matrix(0, length(Md), length(Md)); nb <- 0
+  m <- colMeans(X); sdv <- sqrt(colMeans(sweep(X, 2, m)^2))
+  if (any(!is.finite(sdv) | sdv == 0)) return(integer(0))       # refused elsewhere
+  Xs <- sweep(sweep(X, 2, m), 2, sdv, "/")
+  XM <- Xs[, Md, drop = FALSE]; k <- length(Md); mu <- m[Md] / sdv[Md]
+  Rt <- matrix(0, 0, k); nb <- 0
+  add <- function(M, ref) if (is.finite(ref) && ref > 0) {
+    q <- qr(rbind(Rt, M / ref))                        # keep only the k x k triangle
+    Rt <<- qr.R(q)[, order(q$pivot), drop = FALSE]     # (undo qr()'s column pivoting)
+    nb <<- nb + 1
+  }
   for (j in on_d) {
-    qrj <- qr(cbind(1, X[, tm[j, ], drop = FALSE]))
-    blocks <- list(XM)
-    if (products && !is.null(lm_d)) for (p in which(lm_d[j, 1, ])) blocks <- c(blocks, list(X[, p] * XM))
-    for (A in blocks) {
-      sA <- sqrt(sum(A^2) / ncol(A)); if (!is.finite(sA) || sA == 0) next
-      R <- qr.resid(qrj, A / sA)
-      G <- G + crossprod(R); nb <- nb + 1
+    qrj <- qr(cbind(1, Xs[, tm[j, ], drop = FALSE]))
+    add(qr.resid(qrj, XM), sqrt(sum(XM^2) / k))
+    if (products && !is.null(lm_d)) for (p in which(lm_d[j, 1, ])) {
+      A <- Xs[, p] * XM; a <- Xs[, p]
+      r <- qr.resid(qrj, a); if (sqrt(sum(r^2)) <= 1e-10 * sqrt(sum(a^2))) r[] <- 0
+      add(qr.resid(qrj, A) + outer(r, mu), sqrt((sum(A^2) + sum(a^2)) / (k + 1)))
     }
   }
   if (!nb) return(integer(0))
-  e <- eigen((G + t(G)) / 2, symmetric = TRUE)
-  null <- which(e$values <= tol^2 * nb)
+  sv <- svd(Rt, nu = 0, nv = k)
+  d <- c(sv$d, rep(0, k - length(sv$d)))
+  null <- which(d <= tol * sqrt(nb))
   if (!length(null)) return(integer(0))
-  v <- abs(e$vectors[, null, drop = FALSE])
+  v <- abs(sv$v[, null, drop = FALSE])
   Md[apply(v, 1, max) > 1e-6]
 }
 

@@ -261,11 +261,22 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
 # "saddle" (clearly negative eigenvalue) or "singular" (otherwise, including
 # non-finite entries). Equilibration removes differences in units, not near linear
 # dependence: an exact or numerical rank deficiency stays visible in C.
-.info_inverse <- function(I, tol = .pd_tol) {
+#
+# 'scale' gives the reference scale explicitly (instead of the matrix's own diagonal).
+# The reduced information is I_exact + (constraint curvature): where these cancel, the
+# reduced diagonal is rounding and finite-difference noise, which its own diagonal would
+# blow up to 1 and present as information. It is therefore scaled by the diagonal of
+# the exact information, which transforms with the parameter units in the same way
+# (s -> |d| s), so the decision stays unit-invariant while a reduced matrix that has
+# lost (almost) all information in some direction relative to the exact one is
+# reported as singular.
+.info_inverse <- function(I, tol = .pd_tol, scale = NULL) {
   out <- list(status = "singular", eigen = c(min = NA_real_, max = NA_real_), s = NULL, Cinv = NULL, inverse = NULL)
   if (!is.matrix(I) || !length(I) || !all(is.finite(I))) return(out)
   I <- (I + t(I)) / 2
-  s <- sqrt(abs(diag(I))); s[s == 0] <- 1
+  s <- if (is.null(scale)) sqrt(abs(diag(I))) else scale
+  if (length(s) != nrow(I) || !all(is.finite(s))) return(out)
+  s[s == 0] <- 1
   e <- eigen(I / outer(s, s), symmetric = TRUE)
   ev <- e$values; out$eigen <- c(min = min(ev), max = max(ev))
   thr <- tol * max(abs(ev))
@@ -339,7 +350,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
     dimnames(V) <- dn; V
   }
   trace_AB <- function(e) if (is.null(e$inverse)) NA_real_ else sum(e$Cinv * (B / outer(e$s, e$s))) / np
-  red <- .info_inverse(I_red)
+  red <- .info_inverse(I_red, scale = sqrt(abs(diag(I_exact))))
   fit$vcov <- list(exact = list(ML = ex$inverse, MLR = sandwich(ex)),
                    reduced = if (is.null(red$inverse)) NULL else list(ML = red$inverse, MLR = sandwich(red)),
                    MLF = .info_inverse(B)$inverse)

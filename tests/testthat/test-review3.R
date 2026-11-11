@@ -58,8 +58,9 @@ test_that("R1: a moderator in other units gives the same fit, transformed covari
   # optimizer precision: both fits stop with Newton decrement < 1e-6 (log-likelihood
   # units), i.e. a few 1e-4 standard errors from the maximum
   expect_equal(unname(coef(f2) * k), unname(coef(f1)), tolerance = 1e-4)
-  for (se in c("ML", "MLR", "MLF")) {
-    V1 <- vcov(f1, se); V2 <- vcov(f2, se) * outer(k, k)
+  for (se in c("ML", "MLR", "MLF")) for (inf in c("exact", "reduced")) {
+    if (se == "MLF" && inf == "reduced") next
+    V1 <- vcov(f1, se, inf); V2 <- vcov(f2, se, inf) * outer(k, k)
     expect_equal(unname(sqrt(diag(V2))), unname(sqrt(diag(V1))), tolerance = 1e-4)
   }
   expect_equal(f2$scaling, f1$scaling, tolerance = 1e-4)
@@ -378,4 +379,97 @@ test_that("R5: the citation year comes from release metadata, not the current da
   b <- utils::readCitationFile(file, meta = list(Version = "0.1.0"))
   expect_null(b$year)
   expect_match(format(b, style = "textVersion"), "n\\.d\\.")
+})
+
+# ---- follow-up review of b5f7ef5 (F1-F4) --------------------------------------------
+test_that("F1: reduced information that cancels to noise stays unavailable, in any units", {
+  # analytical exact information A and reduced information diag(0, 1, 1); the numerical
+  # reduced matrix keeps only finite-difference noise in the first direction (values
+  # from the follow-up review's boundary probe)
+  A <- matrix(c(2, 0.5, 0.3, 0.5, 1.5, 0.2, 0.3, 0.2, 1.2), 3)
+  Ir <- matrix(c(5.387690293900960e-12, -3.876898801991047e-13, -1.615335643023741e-11,
+                 -3.876898801991047e-13, 1.000000000005775, 1.477165612051579e-11,
+                 -1.615335643023741e-11, 1.477165612051579e-11, 1.000000000013102), 3)
+  # its own diagonal would make the noise look like information
+  expect_identical(info_inverse(Ir)$status, "ok")
+  for (u in list(c(1, 1, 1), c(1, 1e4, 1e-4), c(-1e2, 1e-2, -1e3))) {
+    D <- diag(u); Ax <- D %*% A %*% D; Irt <- D %*% Ir %*% D
+    r <- info_inverse(Irt, scale = sqrt(abs(diag(Ax))))
+    expect_identical(r$status, "singular"); expect_null(r$inverse)
+    # clearly positive reduced information stays available, with the right inverse
+    Rp <- D %*% (A + diag(c(0.3, -0.2, 0.1))) %*% D
+    rp <- info_inverse(Rp, scale = sqrt(abs(diag(Ax))))
+    Di <- diag(1 / u)
+    expect_identical(rp$status, "ok")
+    expect_equal(rp$inverse, Di %*% solve(A + diag(c(0.3, -0.2, 0.1))) %*% Di, tolerance = 1e-8)
+    # indefinite reduced information stays unavailable
+    Rn <- D %*% (A - diag(c(2.5, 0, 0))) %*% D
+    expect_identical(info_inverse(Rn, scale = sqrt(abs(diag(Ax))))$status, "saddle")
+  }
+})
+
+test_that("F2: the origin of a continuous moderator does not turn near dependence into an exact alias", {
+  dat <- id_data(N = 120)
+  dat$w <- seq(-1, 1, length.out = 120)
+  st <- vapply(c(0, 1e4, 1e9), function(o) {
+    d <- dat; d$x <- o + d$w
+    w <- id_cond(mofia_model(d, items = its3, moderators = "x", threshold_mod = TRUE, loading_mod = TRUE,
+                             var_mod = FALSE, sparse = 0))
+    expect_s3_class(w, "mofia_identification_warning")
+    w$issues$status
+  }, "")
+  expect_identical(unique(st), "identified_by_loading_moderation")
+  # real absorbed products stay errors, whatever the origin or coding
+  for (o in c(0, 1e4)) {
+    d <- dat; d$x <- o + d$w
+    e <- id_cond(mofia_model(d, items = its3, moderators = ~ x + I(x^2), mean_mod = "x", threshold_mod = TRUE,
+                             loading_mod = list(y1 = "x"), var_mod = FALSE, sparse = 0))
+    expect_s3_class(e, "mofia_identification_error")
+  }
+  for (cod in list(c(1, 2), c(0, 1000), c(-5e4, -5e4 + 1), c(1e9, 1e9 + 1))) {
+    d <- dat; d$zz <- cod[d$z + 1]
+    e <- id_cond(mofia_model(d, items = its3, moderators = "zz", threshold_mod = TRUE, loading_mod = TRUE,
+                             var_mod = FALSE, sparse = 0))
+    expect_s3_class(e, "mofia_identification_error"); expect_identical(e$issues$status, "not_identified")
+  }
+  d <- dat; d$z2 <- 1e4 + d$z; d$a2 <- 1e4 + d$a
+  e <- id_cond(mofia_model(d, items = its3, moderators = ~ z2 * a2, threshold_mod = TRUE, loading_mod = TRUE,
+                           var_mod = FALSE, sparse = 0))
+  expect_s3_class(e, "mofia_identification_error")
+  # far-origin moderators are not mistaken for linearly dependent ones
+  d <- dat; d$x <- 1e4 + d$w
+  expect_silent(mofia_model(d, items = its3, moderators = ~ x + I(x^2), threshold_mod = "y2", sparse = 0,
+                            var_mod = FALSE))
+})
+
+test_that("F3: models from 0.1.0 keep their row names and claim no original positions", {
+  skip_on_cran()
+  old <- readRDS(test_path("fixtures", "legacy-0.1.0-fit.rds"))   # made with 08b9acb, see make-legacy-0.1.0.R
+  f <- old$fit
+  expect_null(f$model$cases)
+  sc <- mofia_scores(f)
+  expect_null(attr(sc, "row_index"))
+  expect_identical(rownames(sc), rownames(old$data)[old$kept])     # the names 0.1.0 kept in $Y
+  expect_equal(sc$eta, old$scores$eta, tolerance = 1e-10)
+  e <- predict(f)
+  expect_null(attr(e, "row_index"))
+  expect_identical(rownames(e), rownames(old$data)[old$kept])
+  expect_equal(unname(e), unname(old$expected), tolerance = 1e-10)
+  expect_null(attr(predict(f, type = "prob")$y1, "row_index"))
+})
+
+test_that("F4: the documented score assignment leaves excluded rows, also trailing ones, missing", {
+  skip_on_cran()
+  d <- row_data(); its <- c("y1", "y2", "y3", "y4")
+  d[nrow(d), its] <- NA                                    # trailing exclusion
+  m <- suppressWarnings(mofia_model(d, items = its, moderators = c("age", "g"), standardize = TRUE, var_mod = FALSE))
+  s <- mofia_scores(mofia(m))
+  d$score <- 99                                            # an existing column with stale values
+  d$score <- rep(NA_real_, nrow(d))
+  d$score[attr(s, "row_index")] <- s$eta
+  excl <- c(m$cases$excluded_moderator, m$cases$excluded_response)
+  expect_true(nrow(d) %in% excl)
+  expect_true(all(is.na(d$score[excl])))
+  expect_equal(d$score[m$cases$index], s$eta)
+  expect_identical(rownames(d)[m$cases$index], rownames(s))
 })

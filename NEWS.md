@@ -1,5 +1,26 @@
 # MoFIA 0.1.0.9000
 
+## Corrections after the review of the engine fixes (11 November 2026)
+
+* The reduced information matrix is judged and inverted on the scale of the
+  exact information's diagonal, not its own: where the constraint curvature
+  cancels the exact information, the remaining finite-difference noise is no
+  longer presented as information (reduced standard errors and scaling factors
+  are then unavailable, as in 0.1.0). Exact information, MLF and well-scaled
+  reduced information are unchanged.
+* The mean/DIF alias check works on centred and scaled moderators with the
+  products expanded exactly, so a continuous moderator far from its origin
+  (e.g. 10000 + small variation) is classified like the centred one (identified
+  only through the loading moderation) instead of being refused as exactly
+  unidentified. Binary, interaction and quadratic aliases remain errors under
+  any coding. The linear-dependence check of the moderators is conditioned the
+  same way.
+* For models created with 0.1.0 (no `$cases`), scores and predictions keep the
+  row names stored in the model and no longer claim original positions
+  (`"row_index"` is `NULL`).
+* The documented way to attach scores to the data starts from a full-length
+  `NA` column, so excluded cases (also trailing ones) stay missing.
+
 ## Corrections after the engine review (11 November 2026)
 
 * Positive definiteness of the information matrix (status `"ok"`, `"saddle"`

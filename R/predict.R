@@ -18,10 +18,18 @@
 #'   values, no observed response) have no row. The row names are those of the
 #'   fitted rows of the original data, and attribute `"row_index"` gives their
 #'   positions in it (`model$cases`), so scores can be matched to the data by
-#'   index, e.g. `data$score[attr(s, "row_index")] <- s$eta`, rather than by
-#'   position. For several factors, the posterior covariance matrices are
-#'   attached as attribute `"cov"` (persons x factors x factors, the first
-#'   dimension named like the rows).
+#'   index rather than by position. Start from a full-length column of `NA`
+#'   (also when reusing an existing column), so that excluded cases stay
+#'   missing:
+#'   ```
+#'   data$score <- rep(NA_real_, nrow(data))
+#'   data$score[attr(s, "row_index")] <- s$eta
+#'   ```
+#'   For models created with MoFIA 0.1.0, which did not record the original
+#'   positions, `"row_index"` is `NULL` (unknown) and the row names are those
+#'   kept in the model, if any. For several factors, the posterior covariance
+#'   matrices are attached as attribute `"cov"` (persons x factors x factors,
+#'   the first dimension named like the rows).
 #' @examples
 #' \donttest{
 #' data(parabelief)
@@ -58,11 +66,13 @@ mofia_scores <- function(object) {
 }
 
 # identities of the fitted cases: positions in and row names of the original data
-# (models from older versions without $cases: 1..N)
+# (see below for models from MoFIA 0.1.0, which have no $cases)
 .case_ids <- function(model) {
   cs <- model$cases
-  if (is.null(cs)) list(index = seq_len(model$N), names = as.character(seq_len(model$N)))
-  else list(index = cs$index, names = cs$names)
+  if (!is.null(cs)) return(list(index = cs$index, names = cs$names))
+  # models from MoFIA 0.1.0 (no $cases): the original positions of the fitted cases are
+  # not known after exclusions, so none are claimed; row names kept in $Y are used
+  list(index = NULL, names = rownames(model$Y))
 }
 
 # Marginal (over the factors) moments of each item's linear predictor given the
@@ -154,7 +164,8 @@ mofia_scores <- function(object) {
 #'   omitted). For `"scores"`, a data frame. The rows are the fitted cases
 #'   (without `newdata`) or the rows of `newdata`, in order; their row names
 #'   are carried over, and attribute `"row_index"` gives the positions in the
-#'   original data (fitted cases, see [mofia_scores()]) or in `newdata`.
+#'   original data (fitted cases, see [mofia_scores()]; `NULL` for models
+#'   created with MoFIA 0.1.0) or in `newdata`.
 #' @examples
 #' \donttest{
 #' data(parabelief)
