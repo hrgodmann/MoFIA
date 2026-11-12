@@ -29,7 +29,13 @@
 #' The factors are integrated out per person with adaptive Gauss-Hermite
 #' quadrature: the nodes are centred and scaled at each person's posterior. With
 #' only continuous items the posterior is normal and known in closed form, so
-#' the adaptive rule is exact. Otherwise, after fitting, the log-likelihood at
+#' the adaptive rule is exact. Where the posterior is very concentrated (a
+#' residual variance near zero, as in a Heywood case), it is computed in
+#' square-root form, which keeps the rule exact. At the estimates, the log-likelihood
+#' is also compared with its closed form (the normal density of the items); if
+#' they differ by more than `1e-6`, which only rounding at residual variances
+#' of about `1e-18` or below can cause, estimation fails (see *Convergence*).
+#' With categorical items, after fitting, the log-likelihood at
 #' the estimates is recomputed with a finer rule; if it changes by more than
 #' `accuracy`, the model is refitted with the finer rule (up to three times, with
 #' a warning if the check still fails). Very discriminating categorical items
@@ -53,14 +59,36 @@
 #' checked (maximum absolute gradient below `1e-3`, which does depend on units),
 #' and `status` is `NULL`.
 #'
+#' The optimizer alternates between adapting the quadrature at the current
+#' estimates and maximizing the log-likelihood with that adaptation held fixed
+#' (outer iterations, at most 20). Away from the point where it was adapted a
+#' fixed rule is no longer exact. So that the optimizer does not follow its
+#' error, an outer iteration that lowers the re-adapted log-likelihood has its
+#' step halved, up to 10 times, until it does not. If no halving helps, the
+#' iteration is undone and retried with a tenth of the iterations of
+#' [stats::nlminb()] (down to 2), which keeps it nearer to where the rule was
+#' adapted; if that does not help either, the optimization stops there. A fall counts if it
+#' exceeds `1e-6` with only continuous items (whose adaptive rule is exact) and
+#' `accuracy` (default `0.005`) otherwise, the tolerance of the quadrature.
+#' With only continuous items, once the loop has had to act, and while the
+#' posterior of the factors is very concentrated for some person (a posterior
+#' standard deviation below `1e-4`, e.g. a residual variance near zero), the
+#' adaptation is instead recomputed at every evaluation, so that the optimizer
+#' maximizes the exact log-likelihood.
+#' These actions are recorded in `$optimizer$monotone`. A fit that stopped this
+#' way is usually not at a maximum, which `status` and `converged` then show.
+#'
 #' Estimation fails, and `mofia()` stops with an error of class
 #' `"mofia_estimation_error"` (message "Estimation failed: ..."), when the
 #' log-likelihood is not finite at the solution or, with `se = TRUE`, within a
 #' finite-difference step of it, so that the information matrix cannot be
-#' computed. The estimates are then at the edge of the region where the
+#' computed, and, with only continuous items, when the log-likelihood from
+#' quadrature at the solution differs from its closed form (see *Quadrature*).
+#' The estimates are then at the edge of the region where the
 #' likelihood can be evaluated, typically in a model that is not identified:
-#' for example, a residual variance at the limit of double precision after a
-#' diverged optimization, or a singular factor correlation matrix. The message
+#' for example, a residual variance at the limit of double precision (huge
+#' after a diverged optimization, or near zero), or a singular factor
+#' correlation matrix. The message
 #' names the parameters concerned and the optimizer's final state. No fit is
 #' returned: such estimates are not a regular maximum, and after a diverged
 #' optimization their log-likelihood does not describe a solution.
@@ -97,7 +125,15 @@
 #'   unit diagonal, which `status` is based on), `threads`, `quadrature` (log-likelihood at the
 #'   estimates for the node counts compared), `newton_decrement`, `vcov` (a list
 #'   of covariance matrices), `scaling` (robust scaling correction factors),
-#'   `model`, `link` and `nq`.
+#'   `optimizer` (the final [stats::nlminb()] run's `convergence`, `message`
+#'   and `iterations`, the number of `outer_iterations`, and, only if the
+#'   monotone outer loop acted, `monotone`: one row per such outer iteration
+#'   with the node count `nq`, its `iter_max` for [stats::nlminb()], the
+#'   re-adapted log-likelihood at its start and end, the number of step
+#'   `halvings` (`NA` if it was undone) and the resulting `loglik`; and, only
+#'   if there were any, `exact_outer`, the number of outer iterations in which
+#'   the adaptation was recomputed at every evaluation), `model`, `link` and
+#'   `nq`.
 #' @seealso [mofia_model()], [summary.mofia()], [anova.mofia()],
 #'   [mofia_wald()], [mofia_simulate()]
 #' @references
@@ -139,17 +175,18 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   ctrl <- utils::modifyList(list(eval.max = 3000, iter.max = 2000, rel.tol = 1e-10), control)
   t0 <- proc.time()[[3]]
   runs <- vector("list", starts)
-  runs[[1]] <- .mofia_optimize(model, link, nodes, st, ctrl, verbose)
+  tol <- .mono_tol(cont_only, accuracy)
+  runs[[1]] <- .mofia_optimize(model, link, nodes, st, ctrl, verbose, tol)
   for (r in seq_len(starts)[-1]) {
     if (verbose) message(sprintf("random start %d", r))
-    runs[[r]] <- tryCatch(.mofia_optimize(model, link, nodes, .perturb_start(st, model), ctrl, verbose),
+    runs[[r]] <- tryCatch(.mofia_optimize(model, link, nodes, .perturb_start(st, model), ctrl, verbose, tol),
                           error = function(e) NULL)
   }
   lls <- vapply(runs, function(r) if (is.null(r)) NA_real_ else r$loglik, 1)
   best <- which.max(lls); run <- runs[[best]]
   if (starts > 1 && lls[best] - lls[1] > 1e-3)
     message(sprintf("Random start %d reached a higher log-likelihood than the default start (+%.4f).", best, lls[best] - lls[1]))
-  theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- run$outer
+  theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- run$outer; mono <- run$monotone; n_exact <- run$exact_outer
 
   # quadrature accuracy: recompute the log-likelihood at the estimates with a finer rule;
   # if it changes by more than 'accuracy', refit with the finer rule (up to 3 times).
@@ -176,8 +213,9 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
       }
       if (verbose) message(sprintf("quadrature check: log-likelihood changes by %.3g with %d nodes; refitting with %d", llf - ll0, nqf, nqf))
       nq <- nqf; nodes <- nodes_f
-      run <- .mofia_optimize(model, link, nodes, theta, ctrl, verbose)
-      theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- outer + run$outer
+      run <- .mofia_optimize(model, link, nodes, theta, ctrl, verbose, tol)
+      theta <- run$theta; adapt <- run$adapt; opt <- run$opt; outer <- outer + run$outer; mono <- rbind(mono, run$monotone)
+      n_exact <- n_exact + run$exact_outer
     }
     rownames(quad) <- NULL
   }
@@ -187,11 +225,13 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
             "(very concentrated posteriors, e.g. near-deterministic items).", call. = FALSE)
   ll <- .mofia_ll(theta, model, link, nodes, scores = TRUE, adapt = adapt)
   if (!is.finite(ll)) .estimation_error("Estimation failed: the log-likelihood is not finite at the solution.")
+  if (cont_only) .check_closed_form(as.numeric(ll), theta, model)
   g <- colSums(attr(ll, "scores"))
   fit <- list(coefficients = theta, loglik = as.numeric(ll), npar = length(theta), nobs = model$N,
               gradient = g, max_abs_grad = max(abs(g)), converged = max(abs(g)) < 1e-3,
-              newton_decrement = NA_real_, optimizer = list(convergence = opt$convergence, message = opt$message,
-              iterations = opt$iterations, outer_iterations = outer),
+              newton_decrement = NA_real_, optimizer = c(list(convergence = opt$convergence, message = opt$message,
+              iterations = opt$iterations, outer_iterations = outer), if (!is.null(mono)) list(monotone = mono),
+              if (n_exact > 0) list(exact_outer = n_exact)),
               link = link, nq = nq, quadrature = quad, adapt = adapt, time = unname(proc.time()[[3]] - t0), threads = thr,
               starts = if (starts > 1) data.frame(start = seq_len(starts), logLik = lls) else NULL,
               model = model, call = call)
@@ -214,16 +254,44 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   c(requested = req, openmp = omp, used = if (omp < 1) 1L else req)
 }
 
-# one optimization run from a given start (outer loop re-adapts the quadrature)
-.mofia_optimize <- function(model, link, nodes, start, ctrl, verbose) {
-  raw <- .to_raw(start, model); adapt <- NULL; ll_prev <- -Inf
+# Tolerance of the monotone outer loop (log-likelihood units), see .mofia_optimize(): with
+# only continuous items the re-adapted log-likelihood is exact up to rounding; otherwise it
+# carries quadrature error, and a fall within the quadrature's own tolerance ('accuracy' of
+# mofia(), by default 0.005) is not evidence that the optimizer followed that error.
+.mono_tol <- function(cont_only, accuracy) if (cont_only) 1e-6 else if (is.null(accuracy)) 0.005 else accuracy
+
+# One optimization run from a given start. Each outer iteration adapts the quadrature at
+# the current point and runs nlminb with that adaptation held fixed. Away from the point
+# where it was adapted the fixed rule is no longer exact, and the optimizer can follow its
+# error instead of the likelihood (e.g. a residual variance collapsing towards zero, which
+# a fixed rule rewards). The outer loop is therefore monotone in the re-adapted
+# log-likelihood: if it is lower at the end of an outer iteration than at its start (by more
+# than 'tol', see .mono_tol), the step of that iteration is halved, up to 10 times, until it is not.
+# If no halving is acceptable, the iteration is undone and retried from its start with a tenth
+# of nlminb's iteration budget (staying nearer to where the rule was adapted), down to 2
+# iterations; after that the loop stops. Each such action is a row of $monotone (NULL if
+# there was none).
+#
+# With only continuous items, the fixed rule is fragile once the loop has had to act, and when
+# some person's posterior is concentrated (a residual variance near zero): a small step then
+# moves the posterior by many of its standard deviations, and the fixed rule rewards a
+# collapsing residual variance. In those outer iterations the adaptation, the exact posterior,
+# is recomputed at every evaluation, so that nlminb maximizes the exact log-likelihood;
+# $exact_outer counts them. Without either, the iterations, the stopping rule and the result
+# are those of the plain loop.
+.mofia_optimize <- function(model, link, nodes, start, ctrl, verbose, tol) {
+  raw <- .to_raw(start, model); ll_prev <- -Inf; mono <- NULL; opt_ok <- NULL; ctrl_run <- ctrl; n_exact <- 0L
+  ad_next <- .mofia_adapt(.to_nat(raw, model), model, link, nodes, NULL)
+  ll_start <- as.numeric(.mofia_ll(.to_nat(raw, model), model, link, nodes, adapt = ad_next))
   for (outer in seq_len(20)) {
-    adapt <- .mofia_adapt(.to_nat(raw, model), model, link, nodes, adapt)
+    adapt <- ad_next
+    exact <- all(model$cont) && (!is.null(mono) || .concentrated(adapt, model$D)); n_exact <- n_exact + exact
     # objective and gradient share one likelihood evaluation
     cache <- new.env(); cache$r <- NULL
     eval_at <- function(r) {
       if (is.null(cache$r) || !identical(r, cache$r)) {
-        ll <- .mofia_ll(.to_nat(r, model), model, link, nodes, scores = TRUE, adapt = adapt)
+        ll <- .mofia_ll(.to_nat(r, model), model, link, nodes, scores = TRUE,
+                        adapt = if (exact) .mofia_adapt(.to_nat(r, model), model, link, nodes, adapt) else adapt)
         cache$r <- r; cache$v <- as.numeric(ll)
         cache$g <- if (is.finite(ll)) -.grad_raw(r, colSums(attr(ll, "scores")), model) else rep(0, length(r))
       }
@@ -231,14 +299,46 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
     }
     fn <- function(r) { v <- -eval_at(r)$v; if (!is.finite(v)) 1e100 else v }
     gr <- function(r) eval_at(r)$g
-    opt <- stats::nlminb(raw, fn, gr, control = ctrl)
-    raw <- opt$par
+    opt <- stats::nlminb(raw, fn, gr, control = ctrl_run)
+    # re-adapted at the end point (also the adaptation the next iteration starts from)
+    ad_next <- .mofia_adapt(.to_nat(opt$par, model), model, link, nodes, adapt)
+    ll_end <- as.numeric(.mofia_ll(.to_nat(opt$par, model), model, link, nodes, adapt = ad_next))
+    if (!isTRUE(ll_end >= ll_start - tol)) {
+      step <- opt$par - raw; h <- 0L; ok <- FALSE
+      while (!ok && h < 10L) {
+        h <- h + 1L; r <- raw + step / 2^h
+        a <- .mofia_adapt(.to_nat(r, model), model, link, nodes, adapt)
+        l <- as.numeric(.mofia_ll(.to_nat(r, model), model, link, nodes, adapt = a))
+        ok <- isTRUE(l >= ll_start - tol)
+      }
+      mono <- rbind(mono, data.frame(nq = nodes$nq, outer = outer, iter_max = ctrl_run$iter.max, loglik_start = ll_start,
+                                     loglik_end = ll_end, halvings = if (ok) h else NA_integer_, loglik = if (ok) l else ll_start))
+      if (verbose) message(sprintf("outer %d: re-adapted logLik fell from %.6f to %.6f; %s", outer, ll_start, ll_end,
+                                   if (ok) sprintf("step halved %d time(s)", h) else "iteration undone"))
+      if (!ok) {                                       # undone: keep raw and its adaptation
+        if (!is.null(opt_ok)) opt <- opt_ok
+        ad_next <- adapt
+        if (ctrl_run$iter.max <= 2) break
+        ctrl_run$iter.max <- max(2, ctrl_run$iter.max %/% 10); ll_prev <- -Inf; next
+      }
+      opt$par <- r; opt$objective <- -l; ad_next <- a; ll_end <- l
+    }
+    raw <- opt$par; ll_start <- ll_end; opt_ok <- opt
     if (verbose) message(sprintf("outer %d: logLik %.6f (%d iterations)", outer, -opt$objective, opt$iterations))
     if (abs(-opt$objective - ll_prev) < 1e-8) break
     ll_prev <- -opt$objective
   }
   theta <- .to_nat(raw, model); names(theta) <- model$par$name
-  list(theta = theta, loglik = -opt$objective, adapt = adapt, opt = opt, outer = outer)
+  list(theta = theta, loglik = if (is.null(mono) && !n_exact) -opt$objective else ll_start, adapt = adapt, opt = opt,
+       outer = outer, monotone = mono, exact_outer = n_exact)
+}
+
+# Is some person's posterior concentrated, with a standard deviation (Cholesky pivot) of at
+# most 1 / sqrt(.cont_qmax), where .cont_posterior() switches to the square-root form?
+.concentrated <- function(adapt, D) {
+  if (is.null(adapt$Lc)) return(FALSE)
+  piv <- adapt$Lc[, vapply(seq_len(D), function(d) .lt_index(d, d), 1), drop = FALSE]
+  !all(piv > 1 / sqrt(.cont_qmax))
 }
 
 # random perturbation of the default starting values
@@ -324,6 +424,25 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
 # log-likelihood is not finite at the solution, see mofia()).
 .estimation_error <- function(msg) stop(structure(class = c("mofia_estimation_error", "error", "condition"),
                                                   list(message = msg, call = NULL)))
+
+# With only continuous items the log-likelihood is also known in closed form
+# (.cont_loglik). The adaptive quadrature is exact up to rounding, but that rounding grows
+# as a residual variance approaches zero and the posterior of the factors collapses (below
+# about 1e-18 it can exceed .cont_ll_tol). A solution at which the two disagree is not
+# returned: the gradient, the information and the standard errors come from the same
+# quadrature.
+.cont_ll_tol <- 1e-6
+.check_closed_form <- function(ll, theta, model) {
+  cf <- .cont_loglik(theta, model)
+  if (is.finite(cf) && abs(ll - cf) <= .cont_ll_tol) return(invisible(cf))
+  rv <- .engine_inputs(theta, model)$RV; k <- which(rv == min(rv), arr.ind = TRUE)[1, 2]
+  .estimation_error(sprintf(paste0(
+    "Estimation failed: at the solution the log-likelihood from quadrature (%.6f) differs from its exact value (%s), ",
+    "so the estimates and standard errors cannot be trusted. The smallest residual variance is %.3g (item %s); as a ",
+    "residual variance approaches zero (a Heywood case), the posterior of the factors becomes too concentrated for ",
+    "the quadrature. The model may not be identified (check the anchor items), or the item may be (nearly) redundant."),
+    ll, if (is.finite(cf)) sprintf("%.6f", cf) else "not computable", min(rv), model$items[k]))
+}
 
 # The information matrix cannot be formed because the likelihood is not finite at, or
 # within a finite-difference step of, the estimates: they are at the edge of the region

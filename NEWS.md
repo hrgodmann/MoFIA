@@ -1,5 +1,51 @@
 # MoFIA 0.1.0.9000
 
+## Continuous items with a residual variance near zero
+
+* With only continuous items, the posterior of the factors that centres and
+  scales the adaptive quadrature is now computed in square-root form (Givens
+  rotations of the precision factor, no explicit inverse, no floor) for persons
+  whose posterior is very concentrated (a posterior variance below about
+  `1e-8`); for all other persons the computation is unchanged. Before, when a
+  residual variance approached zero (a Heywood case, or an optimizer drifting
+  there), forming and inverting the posterior precision lost precision, and an
+  absolute floor of `1e-10` on the posterior variances made the rule far too
+  wide. The reported log-likelihood could then be far too
+  high (for example −2LL 4139.78 instead of 5517.21 for a three-factor scalar
+  model, and 2707.51 instead of 4165.72 for a one-factor model whose maximum
+  likelihood residual variance is zero), and the optimizer followed that
+  error. The quadrature now agrees with the closed form to about `1e-8` down to
+  residual variances of `1e-14`.
+* At the estimates, the log-likelihood of a model with only continuous items
+  is compared with its closed form (the normal density of the items). If they
+  differ by more than `1e-6`, which rounding can cause only at residual
+  variances of about `1e-18` or below, `mofia()` stops with
+  "Estimation failed: ..." (class `"mofia_estimation_error"`).
+* The optimizer's outer loop is monotone in the re-adapted log-likelihood: an
+  outer iteration that lowers it (by more than `1e-6` with only continuous
+  items, by more than `accuracy` otherwise) has its step halved, up to 10
+  times, or, if that does not help, is undone and retried with a tenth of the
+  optimizer's iterations (down to 2) before the optimization stops. Such
+  actions are recorded in `$optimizer$monotone`, which is absent otherwise.
+* With only continuous items, once the monotone loop has had to act, and while
+  the posterior of the factors is very concentrated for some person (a
+  residual variance near zero), the adaptation is recomputed at every
+  evaluation, so that the optimizer maximizes the exact log-likelihood (the
+  number of such outer iterations is `$optimizer$exact_outer`, absent if
+  none). Identified models whose maximum has a residual variance of zero
+  (Heywood cases) then reach the same −2LL as Mplus. Models that are not
+  identified no longer diverge along their ridge: they reach it, typically
+  with status `"saddle"` or `"singular"`, or, if their maximum lies on the
+  boundary of positive definiteness, stop with the estimation error
+  (`"mofia_estimation_error"`).
+* Without either, the iterations and the result are those of the plain loop:
+  fits whose posteriors are not that concentrated and in which the monotone
+  loop does not act are unchanged, bit for bit. Mixed models keep their
+  iterative adaptation (only its starting point, the posterior given the
+  continuous items, is exact where it is concentrated); with a continuous
+  residual variance below about `1e-12` their likelihood is inaccurate, which
+  the quadrature check reports with a warning.
+
 ## Diverged fits
 
 * When the log-likelihood is not finite within a finite-difference step of the
