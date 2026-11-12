@@ -1,5 +1,0 @@
-lib <- commandArgs(TRUE)[1]; .libPaths(c(lib, .libPaths())); suppressMessages(library(MoFIA))
-data(parabelief); ub <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession", "Sorcery", "HauntedPlaces")
-f1 <- mofia(mofia_model(parabelief, items = ub, moderators = ~ Age * Male + I(Age^2), threshold_mod = c("Aliens","Sorcery"), loading_mod = "Aliens"))
-f2 <- suppressMessages(mofia(mofia_model(parabelief, items = ub, moderators = c("Age","Male"), standardize = TRUE, cor_mod = FALSE, threshold_mod = "DevilPossession")))
-saveRDS(lapply(list(f1, f2), function(f) list(ll = f$loglik, coef = coef(f), ml = vcov(f, "ML"), mlr = vcov(f, "MLR"), mlf = vcov(f, "MLF"), sc = f$scaling, st = f$status)), sprintf("cmp_%s.rds", basename(lib)))

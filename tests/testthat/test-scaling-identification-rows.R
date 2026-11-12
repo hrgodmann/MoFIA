@@ -1,7 +1,5 @@
-# Regression tests for the engine review of 11 November 2026 (audit of 0.1.0 at
-# commit 08b9acb). R1: unit-invariant information checks; R2: exact mean/DIF aliases
-# with moderated loadings; R3: row identity of scores and predictions; R4: exclusions
-# before moderator classification and scaling; R5: thread capability and citation.
+# Regression tests for information scaling, identification, row identity,
+# analyzed-sample preprocessing, thread capability and citation metadata.
 
 ns <- asNamespace("MoFIA")
 info_inverse <- function(...) get(".info_inverse", ns)(...)
@@ -11,8 +9,8 @@ with_check_off <- function(expr) {
   expr
 }
 
-# ---- R1 ------------------------------------------------------------------------------
-test_that("R1: information classification and inverse do not depend on parameter units", {
+# ---- Information matrices ------------------------------------------------------------
+test_that("information classification and inverse do not depend on parameter units", {
   S <- diag(c(1, 1e5, 1e-4, 1e3))                       # change of parameter units
   A <- matrix(c(4, 1, 0.5, 0.2, 1, 3, 0.3, 0.1, 0.5, 0.3, 2, 0.4, 0.2, 0.1, 0.4, 1), 4)
   As <- S %*% A %*% S
@@ -41,7 +39,7 @@ test_that("R1: information classification and inverse do not depend on parameter
   expect_identical(info_inverse(matrix(Inf, 2, 2))$status, "singular")
 })
 
-test_that("R1: a moderator in other units gives the same fit, transformed covariances and tests", {
+test_that("a moderator in other units gives the same fit, transformed covariances and tests", {
   skip_on_cran()
   data(parabelief)
   its <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession", "Sorcery")
@@ -78,7 +76,7 @@ test_that("R1: a moderator in other units gives the same fit, transformed covari
   expect_equal(lr2$statistic, lr1$statistic, tolerance = 1e-4)
 })
 
-test_that("R1: age in years and its square match the standardized model after transformation", {
+test_that("age in years and its square match the standardized model after transformation", {
   skip_on_cran()
   skip_if_not_installed("numDeriv")
   data(parabelief)
@@ -90,7 +88,7 @@ test_that("R1: age in years and its square match the standardized model after tr
   expect_identical(fr$status, "ok"); expect_true(fr$converged)      # was "singular" in 0.1.0
   expect_equal(fr$loglik, fs$loglik, tolerance = 1e-6)
   # standardized parameters as a function of the raw ones (origin and scale of the
-  # factor move with the reference age; see the derivation in the review notes)
+  # factor move with the standardized reference age)
   m <- mean(d$AgeY); s <- stats::sd(d$AgeY)
   g <- function(t) {
     o <- t; G <- function(n) t[[n]]
@@ -123,7 +121,7 @@ test_that("R1: age in years and its square match the standardized model after tr
                mofia_wald(fs, "^beta\\[DevilPossession,", regex = TRUE)$statistic, tolerance = 1e-3)
 })
 
-test_that("R1: a truly unidentified model is still reported as singular", {
+test_that("a truly unidentified model is still reported as singular", {
   skip_on_cran()
   data(parabelief)
   ub <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession", "Sorcery", "HauntedPlaces")
@@ -135,7 +133,7 @@ test_that("R1: a truly unidentified model is still reported as singular", {
   expect_error(vcov(f), "singular")
 })
 
-test_that("R1: score tests flag candidates without information given the model, in any units", {
+test_that("score tests flag candidates without information given the model, in any units", {
   skip_on_cran()
   data(parabelief)
   its <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession")
@@ -149,7 +147,7 @@ test_that("R1: score tests flag candidates without information given the model, 
   }
 })
 
-# ---- R2 ------------------------------------------------------------------------------
+# ---- Identification ------------------------------------------------------------------
 id_data <- function(N = 240, seed = 3) {
   set.seed(seed)
   data.frame(y1 = sample(0:2, N, TRUE), y2 = sample(0:2, N, TRUE), y3 = sample(0:2, N, TRUE),
@@ -161,7 +159,7 @@ id_cond <- function(expr) tryCatch(withCallingHandlers(expr, warning = function(
   mofia_identification_warning = function(w) w)
 its3 <- c("y1", "y2", "y3")
 
-test_that("R2: mean + all thresholds + loadings by the same binary moderator is refused (exact alias)", {
+test_that("mean + all thresholds + loadings by the same binary moderator is refused (exact alias)", {
   dat <- id_data()
   e <- id_cond(mofia_model(dat, items = its3, moderators = "z", threshold_mod = TRUE, loading_mod = TRUE,
                            var_mod = FALSE, sparse = 0))
@@ -186,7 +184,7 @@ test_that("R2: mean + all thresholds + loadings by the same binary moderator is 
   expect_identical(e$issues$moderators, "w")
 })
 
-test_that("R2: the refused patterns are exact likelihood invariances", {
+test_that("the refused patterns are exact likelihood invariances", {
   dat <- id_data()
   for (spec in list(list(mods = "z", lm = TRUE), list(mods = ~ z * a, lm = TRUE))) {
     m <- with_check_off(mofia_model(dat, items = its3, moderators = spec$mods, threshold_mod = TRUE,
@@ -208,7 +206,7 @@ test_that("R2: the refused patterns are exact likelihood invariances", {
   }
 })
 
-test_that("R2: weakly identified and identified patterns are not refused", {
+test_that("weakly identified and identified patterns are not refused", {
   dat <- id_data()
   # continuous moderator: the product w * w is not absorbed -> identified through the loadings only
   w <- id_cond(mofia_model(dat, items = its3, moderators = "w", threshold_mod = TRUE, loading_mod = TRUE,
@@ -243,7 +241,7 @@ test_that("R2: weakly identified and identified patterns are not refused", {
   expect_identical(e$issues$parameter, "variance")
 })
 
-test_that("R2: cross-loadings are checked per factor", {
+test_that("cross-loadings are checked per factor", {
   dat <- id_data()
   ld <- list(f1 = c("y1", "y2", "y3"), f2 = c("y3", "y4", "y5"))
   e <- id_cond(mofia_model(dat, loadings = ld, moderators = "z", threshold_mod = TRUE, loading_mod = TRUE,
@@ -256,7 +254,7 @@ test_that("R2: cross-loadings are checked per factor", {
   expect_identical(e$issues$factor, "f2")
 })
 
-# ---- R3 / R4 -------------------------------------------------------------------------
+# ---- Row identity and preprocessing --------------------------------------------------
 row_data <- function() {
   set.seed(11); N <- 60; eta <- stats::rnorm(N)
   d <- data.frame(y1 = as.integer(eta + stats::rlogis(N) > 0), y2 = as.integer(1.2 * eta + stats::rlogis(N) > 0),
@@ -270,7 +268,7 @@ row_data <- function() {
   d
 }
 
-test_that("R3: original row positions and names are kept through both exclusions and rebuilds", {
+test_that("original row positions and names are kept through both exclusions and rebuilds", {
   d <- row_data(); its <- c("y1", "y2", "y3", "y4")
   expect_warning(expect_warning(m <- mofia_model(d, items = its, moderators = c("age", "g"), standardize = TRUE),
                                 "2 case\\(s\\) with missing moderator"), "3 case\\(s\\) without any observed")
@@ -286,7 +284,7 @@ test_that("R3: original row positions and names are kept through both exclusions
   expect_identical(m0$cases, m$cases)
 })
 
-test_that("R3: scores and predictions carry the identities of their rows", {
+test_that("scores and predictions carry the identities of their rows", {
   skip_on_cran()
   d <- row_data(); its <- c("y1", "y2", "y3", "y4")
   m <- suppressWarnings(mofia_model(d, items = its, moderators = c("age", "g"), standardize = TRUE, var_mod = FALSE))
@@ -317,7 +315,7 @@ test_that("R3: scores and predictions carry the identities of their rows", {
   expect_error(predict(f, newdata = data.frame(age = c(30, NA), g = 0:1)), "Missing moderator")
 })
 
-test_that("R3: posterior covariance rows are named like the score rows (two factors)", {
+test_that("posterior covariance rows are named like the score rows (two factors)", {
   skip_on_cran()
   fx <- sim_two_factor(N = 300, seed = 4)
   d <- fx$data; rownames(d) <- paste0("p", seq_len(nrow(d))); d[c(5, 50), paste0("y", 1:6)] <- NA
@@ -328,7 +326,7 @@ test_that("R3: posterior covariance rows are named like the score rows (two fact
   expect_identical(rownames(sc)[1:5], c("p1", "p2", "p3", "p4", "p6"))
 })
 
-test_that("R4: moderator classification and standardization use only the fitted cases", {
+test_that("moderator classification and standardization use only the fitted cases", {
   d <- row_data(); its <- c("y1", "y2", "y3", "y4")
   m <- suppressWarnings(mofia_model(d, items = its, moderators = c("age", "g"), standardize = TRUE))
   kept <- d[m$cases$index, ]
@@ -350,8 +348,8 @@ test_that("R4: moderator classification and standardization use only the fitted 
   expect_equal(colMeans(m$X), c(0, 0, 0), tolerance = 1e-12, ignore_attr = TRUE)
 })
 
-# ---- R5 ------------------------------------------------------------------------------
-test_that("R5: requested threads are reported, and give the same result where OpenMP is available", {
+# ---- Threads and citation ------------------------------------------------------------
+test_that("requested threads are reported, and give the same result where OpenMP is available", {
   skip_on_cran()
   data(parabelief)
   m <- mofia_model(parabelief, items = c("SpiritsGhosts", "GnomesElves", "Aliens"), moderators = "Male")
@@ -371,7 +369,7 @@ test_that("R5: requested threads are reported, and give the same result where Op
   expect_equal(coef(f2), coef(f1), tolerance = 1e-8)
 })
 
-test_that("R5: the citation year comes from release metadata, not the current date", {
+test_that("the citation year comes from release metadata, not the current date", {
   file <- system.file("CITATION", package = "MoFIA")
   skip_if(file == "")
   a <- utils::readCitationFile(file, meta = list(Version = "0.1.0", Date = "2025-03-04"))
@@ -381,11 +379,11 @@ test_that("R5: the citation year comes from release metadata, not the current da
   expect_match(format(b, style = "textVersion"), "n\\.d\\.")
 })
 
-# ---- follow-up review of b5f7ef5 (F1-F4) --------------------------------------------
-test_that("F1: reduced information that cancels to noise stays unavailable, in any units", {
+# ---- Numerical and compatibility regressions -----------------------------------------
+test_that("reduced information that cancels to noise stays unavailable, in any units", {
   # analytical exact information A and reduced information diag(0, 1, 1); the numerical
   # reduced matrix keeps only finite-difference noise in the first direction (values
-  # from the follow-up review's boundary probe)
+  # from numerical differentiation near a singular reduced-information matrix)
   A <- matrix(c(2, 0.5, 0.3, 0.5, 1.5, 0.2, 0.3, 0.2, 1.2), 3)
   Ir <- matrix(c(5.387690293900960e-12, -3.876898801991047e-13, -1.615335643023741e-11,
                  -3.876898801991047e-13, 1.000000000005775, 1.477165612051579e-11,
@@ -408,7 +406,7 @@ test_that("F1: reduced information that cancels to noise stays unavailable, in a
   }
 })
 
-test_that("F2: the origin of a continuous moderator does not turn near dependence into an exact alias", {
+test_that("the origin of a continuous moderator does not turn near dependence into an exact alias", {
   dat <- id_data(N = 120)
   dat$w <- seq(-1, 1, length.out = 120)
   st <- vapply(c(0, 1e4, 1e9), function(o) {
@@ -442,7 +440,7 @@ test_that("F2: the origin of a continuous moderator does not turn near dependenc
                             var_mod = FALSE))
 })
 
-test_that("F3: models from 0.1.0 keep their row names and claim no original positions", {
+test_that("models from 0.1.0 keep their row names and claim no original positions", {
   skip_on_cran()
   old <- readRDS(test_path("fixtures", "legacy-0.1.0-fit.rds"))   # made with 08b9acb, see make-legacy-0.1.0.R
   f <- old$fit
@@ -458,7 +456,7 @@ test_that("F3: models from 0.1.0 keep their row names and claim no original posi
   expect_null(attr(predict(f, type = "prob")$y1, "row_index"))
 })
 
-test_that("F4: the documented score assignment leaves excluded rows, also trailing ones, missing", {
+test_that("the documented score assignment leaves excluded rows, also trailing ones, missing", {
   skip_on_cran()
   d <- row_data(); its <- c("y1", "y2", "y3", "y4")
   d[nrow(d), its] <- NA                                    # trailing exclusion

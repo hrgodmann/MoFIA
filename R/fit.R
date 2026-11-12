@@ -50,7 +50,20 @@
 #' years and its square); the covariance matrices are transformed back to the
 #' parameters' units. Scaling removes differences in units, not near linear
 #' dependence among the parameters. With `se = FALSE` only the gradient is
-#' checked (maximum absolute gradient below `1e-3`, which does depend on units).
+#' checked (maximum absolute gradient below `1e-3`, which does depend on units),
+#' and `status` is `NULL`.
+#'
+#' Estimation fails, and `mofia()` stops with an error of class
+#' `"mofia_estimation_error"` (message "Estimation failed: ..."), when the
+#' log-likelihood is not finite at the solution or, with `se = TRUE`, within a
+#' finite-difference step of it, so that the information matrix cannot be
+#' computed. The estimates are then at the edge of the region where the
+#' likelihood can be evaluated, typically in a model that is not identified:
+#' for example, a residual variance at the limit of double precision after a
+#' diverged optimization, or a singular factor correlation matrix. The message
+#' names the parameters concerned and the optimizer's final state. No fit is
+#' returned: such estimates are not a regular maximum, and after a diverged
+#' optimization their log-likelihood does not describe a solution.
 #'
 #' @param model A `mofia_model` from [mofia_model()].
 #' @param link `"logit"` (default) or `"probit"` for categorical items.
@@ -77,8 +90,9 @@
 #'
 #' @return An object of class `mofia` with components including
 #'   `coefficients`, `loglik`, `npar`, `nobs`, `converged`, `status` (`"ok"`,
-#'   `"saddle"` or `"singular"`), `information_eigen` (smallest and largest
-#'   eigenvalue of the information matrix, in the parameters' units),
+#'   `"saddle"` or `"singular"`; `NULL` with `se = FALSE`), `se_note` (why
+#'   standard errors are not available, if they are not), `information_eigen`
+#'   (smallest and largest eigenvalue of the information matrix, in the parameters' units),
 #'   `information_eigen_scaled` (the same for the information matrix scaled to
 #'   unit diagonal, which `status` is based on), `threads`, `quadrature` (log-likelihood at the
 #'   estimates for the node counts compared), `newton_decrement`, `vcov` (a list
@@ -172,7 +186,7 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
     warning("The adaptive quadrature did not settle at the solution; the log-likelihood may be inaccurate ",
             "(very concentrated posteriors, e.g. near-deterministic items).", call. = FALSE)
   ll <- .mofia_ll(theta, model, link, nodes, scores = TRUE, adapt = adapt)
-  if (!is.finite(ll)) stop("Estimation failed: the log-likelihood is not finite at the solution.")
+  if (!is.finite(ll)) .estimation_error("Estimation failed: the log-likelihood is not finite at the solution.")
   g <- colSums(attr(ll, "scores"))
   fit <- list(coefficients = theta, loglik = as.numeric(ll), npar = length(theta), nobs = model$N,
               gradient = g, max_abs_grad = max(abs(g)), converged = max(abs(g)) < 1e-3,
@@ -300,18 +314,55 @@ mofia <- function(model, link = c("logit", "probit"), nq = NULL, start = NULL, s
   1e-5 * pmax(base, abs(theta))
 }
 
+# A likelihood evaluation that the information matrix can be built from: a finite
+# log-likelihood that carries its score matrix. The likelihood is returned as a bare
+# -Inf without scores when the parameters are invalid or a person's log-likelihood is
+# not finite (e.g. a residual variance at the limit of double precision).
+.ll_ok <- function(ll) length(ll) == 1 && is.finite(ll) && !is.null(attr(ll, "scores"))
+
+# Estimation failure: an error of class "mofia_estimation_error" (also used when the
+# log-likelihood is not finite at the solution, see mofia()).
+.estimation_error <- function(msg) stop(structure(class = c("mofia_estimation_error", "error", "condition"),
+                                                  list(message = msg, call = NULL)))
+
+# The information matrix cannot be formed because the likelihood is not finite at, or
+# within a finite-difference step of, the estimates: they are at the edge of the region
+# where the likelihood can be evaluated (a variance at the limit of double precision after
+# a diverged optimization, or a singular factor correlation matrix), not at a regular
+# maximum. No fit is returned (as when the log-likelihood is not finite at the solution).
+.se_failed <- function(fit, why) {
+  op <- fit$optimizer
+  .estimation_error(paste0(
+    "Estimation failed: ", why, ", so the information matrix cannot be computed",
+    if (!is.null(op$message)) sprintf(" (the optimizer stopped with '%s' after %d outer iteration(s); max |gradient| %.3g)",
+                                      op$message, as.integer(op$outer_iterations), fit$max_abs_grad),
+    ". The estimates are at the edge of the region where the likelihood can be evaluated (e.g. a variance at the limit ",
+    "of double precision, or a singular factor correlation matrix). The model may not be identified (check the anchor ",
+    "items), or other starting values may help (starts > 1)."))
+}
+
 .mofia_se <- function(fit, check = TRUE) {
   model <- fit$model; theta <- fit$coefficients; link <- fit$link; adapt <- fit$adapt
   nodes <- .mofia_nodes(fit$nq, model$D)
   ll <- .mofia_ll(theta, model, link, nodes, scores = TRUE, adapt = adapt)
+  if (!.ll_ok(ll)) .se_failed(fit, "the log-likelihood is not finite at the estimates")
   S <- attr(ll, "scores")
-  # observed information: central differences of the analytic gradient
-  gfun <- function(th) colSums(attr(.mofia_ll(th, model, link, nodes, scores = TRUE, adapt = adapt), "scores"))
-  np <- length(theta); h <- .fd_steps(theta, model); H <- matrix(0, np, np)
+  # observed information: central differences of the analytic gradient. A step at which
+  # the likelihood is not finite leaves the information undefined (see .se_failed).
+  gfun <- function(th) {
+    v <- .mofia_ll(th, model, link, nodes, scores = TRUE, adapt = adapt)
+    if (.ll_ok(v)) colSums(attr(v, "scores")) else NULL
+  }
+  np <- length(theta); h <- .fd_steps(theta, model); H <- matrix(0, np, np); bad <- integer(0)
   for (k in seq_len(np)) {
     e <- replace(numeric(np), k, h[k])
-    H[, k] <- (gfun(theta + e) - gfun(theta - e)) / (2 * h[k])
+    gp <- gfun(theta + e); gm <- gfun(theta - e)
+    if (is.null(gp) || is.null(gm)) { bad <- c(bad, k); next }
+    H[, k] <- (gp - gm) / (2 * h[k])
   }
+  if (length(bad))
+    .se_failed(fit, sprintf("the log-likelihood is not finite within a finite-difference step of the estimates of %s",
+                            paste(sprintf("%s (%.6g)", names(theta)[bad], theta[bad]), collapse = ", ")))
   H <- (H + t(H)) / 2
   dn <- list(names(theta), names(theta))
   B <- crossprod(S); dimnames(B) <- dn

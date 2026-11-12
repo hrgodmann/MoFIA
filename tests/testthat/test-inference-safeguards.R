@@ -1,11 +1,9 @@
-# Regression tests for the findings of the external review of version 0.1.0
-# (7 November 2026). Each test reproduces the reported case and checks the
-# corrected behaviour.
+# Regression tests for inference safeguards, model validation and numerical accuracy.
 
 ns <- asNamespace("MoFIA")
 st0 <- function(m, link = "logit") get(".mofia_start", ns)(m, link)
 
-test_that("A1: the robust sandwich uses the exact information by default", {
+test_that("the robust sandwich uses the exact information by default", {
   skip_on_cran()
   # misspecified residual-variance function: true variance 1 + 3 x^2, fitted exp(w0 + w x)
   set.seed(122); nb <- 200; eta <- rnorm(nb)
@@ -24,7 +22,7 @@ test_that("A1: the robust sandwich uses the exact information by default", {
   expect_equal(sqrt(vcov(f, "MLR", "reduced")[p, p] / vcov(f, "MLR", "exact")[p, p]), 0.8, tolerance = 1e-4)
 })
 
-test_that("A2: exactly unidentified moderation patterns are refused, weak ones warned", {
+test_that("exactly unidentified moderation patterns are refused, weak ones warned", {
   dat <- data.frame(y1 = rep(0:2, 20), y2 = rep(c(0, 2, 1), 20), y3 = rep(c(1, 1, 0, 2), 15), x = rep(0:1, 30),
                     z = round(sin(1:60), 3))
   # factor mean and all thresholds moderated by x
@@ -55,7 +53,7 @@ test_that("A2: exactly unidentified moderation patterns are refused, weak ones w
   expect_equal(mofia_loglik(m, t2), mofia_loglik(m, t1), tolerance = 1e-10)
 })
 
-test_that("A2: degenerate moderators are refused", {
+test_that("degenerate moderators are refused", {
   dat <- data.frame(y1 = rep(0:1, 10), y2 = rep(c(0, 1, 1, 0), 5), x = 1, z = 1:20, w = 2 * (1:20) + 1)
   expect_error(mofia_model(dat, items = c("y1", "y2"), moderators = "x", sparse = 0), "Constant")
   expect_error(mofia_model(dat, items = c("y1", "y2"), moderators = c("z", "w"), sparse = 0), "linearly dependent")
@@ -63,7 +61,7 @@ test_that("A2: degenerate moderators are refused", {
   expect_error(mofia_model(dat, items = c("y1", "y2"), moderators = "v", sparse = 0), "finite")
 })
 
-test_that("A3: a saddle point is not reported as converged and gets no standard errors", {
+test_that("a saddle point is not reported as converged and gets no standard errors", {
   set.seed(5); N <- 300; eta <- rnorm(N)
   dat <- as.data.frame(sapply(1:4, function(j) eta + rnorm(N, sd = 0.6))); names(dat) <- paste0("y", 1:4)
   m <- mofia_model(dat, items = names(dat), continuous = names(dat))
@@ -82,12 +80,12 @@ test_that("A3: a saddle point is not reported as converged and gets no standard 
   expect_output(print(f), "saddle point")
 })
 
-test_that("A4: non-positive variances give NA, never zero standard errors", {
+test_that("non-positive variances give NA, never zero standard errors", {
   se_fun <- get(".se_from_vcov", ns)
   expect_identical(se_fun(diag(c(4, -1, 0, NA))), c(2, NA, NA, NA))
 })
 
-test_that("A5: tail probabilities and scores are evaluated stably", {
+test_that("tail probabilities and scores are evaluated stably", {
   ll <- get(".mofia_ll", ns); nodes <- get(".mofia_nodes", ns)
   # probit: thresholds at 10, zero loadings -> product of known normal tail probabilities
   dat <- data.frame(y1 = rep(0:1, 5), y2 = rep(0:1, 5), y3 = rep(0:1, 5))
@@ -120,7 +118,7 @@ test_that("A5: tail probabilities and scores are evaluated stably", {
   expect_true(all(vapply(cp, function(p) all(p >= 0), TRUE)))
 })
 
-test_that("A6: likelihood-ratio tests refuse incompatible comparisons", {
+test_that("likelihood-ratio tests refuse incompatible comparisons", {
   skip_on_cran()
   data(parabelief); its <- c("SpiritsGhosts", "GnomesElves", "Aliens", "Sorcery")
   f0 <- mofia(mofia_model(parabelief, items = its, moderators = "Male"))
@@ -143,7 +141,7 @@ test_that("A6: likelihood-ratio tests refuse incompatible comparisons", {
   expect_error(mofia_lrt(f0, unconv), "not converged")
 })
 
-test_that("A7: cases without any observed response are removed and do not change N or BIC", {
+test_that("cases without any observed response are removed and do not change N or BIC", {
   skip_on_cran()
   data(parabelief); its <- c("SpiritsGhosts", "GnomesElves", "Aliens", "Sorcery")
   f <- mofia(mofia_model(parabelief, items = its, moderators = "Male"))
@@ -154,7 +152,7 @@ test_that("A7: cases without any observed response are removed and do not change
   expect_equal(BIC(f2), BIC(f), tolerance = 1e-8)
 })
 
-test_that("B1: named specification matrices are aligned by name; wrong shapes are refused", {
+test_that("named specification matrices are aligned by name; wrong shapes are refused", {
   dat <- data.frame(y1 = rep(0:2, 10), y2 = rep(c(0, 2, 1), 10), y3 = rep(c(1, 0, 2), 10),
                     x = rep(0:1, 15), z = round(cos(1:30), 3))
   tm <- matrix(c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE), 3, 2, dimnames = list(c("y1", "y2", "y3"), c("x", "z")))
@@ -177,7 +175,7 @@ test_that("B1: named specification matrices are aligned by name; wrong shapes ar
   expect_true("lambda1[y2,eta,z]" %in% m3$par$name)
 })
 
-test_that("B2: data-dependent formula transformations keep their training values", {
+test_that("data-dependent formula transformations keep their training values", {
   dd <- data.frame(y1 = rep(0:2, 10), y2 = rep(c(0, 1, 2, 2, 1, 0), 5), y3 = rep(c(1, 0, 2), 10), x = seq_len(30))
   dx <- get(".design_X", ns)
   m <- mofia_model(dd, items = c("y1", "y2", "y3"), moderators = ~ scale(x), sparse = 0)
@@ -188,7 +186,7 @@ test_that("B2: data-dependent formula transformations keep their training values
   expect_equal(dx(mp, dd[3:7, ]), mp$X[3:7, ], ignore_attr = TRUE)
 })
 
-test_that("B3: summaries print for every standard-error type", {
+test_that("summaries print for every standard-error type", {
   skip_on_cran()
   data(parabelief)
   f <- mofia(mofia_model(parabelief, items = c("SpiritsGhosts", "GnomesElves", "Aliens"), moderators = "Male"))
@@ -196,7 +194,7 @@ test_that("B3: summaries print for every standard-error type", {
   expect_output(print(summary(f, information = "reduced")), "reduced information")
 })
 
-test_that("B4: simulated data keep the original moderator variables", {
+test_that("simulated data keep the original moderator variables", {
   skip_on_cran()
   set.seed(3); n <- 300
   d <- data.frame(age = sample(10:39, n, TRUE), g = factor(sample(c("a", "b"), n, TRUE)))

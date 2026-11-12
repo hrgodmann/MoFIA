@@ -53,8 +53,9 @@ threads).}
 \value{
 An object of class \code{mofia} with components including
 \code{coefficients}, \code{loglik}, \code{npar}, \code{nobs}, \code{converged}, \code{status} (\code{"ok"},
-\code{"saddle"} or \code{"singular"}), \code{information_eigen} (smallest and largest
-eigenvalue of the information matrix, in the parameters' units),
+\code{"saddle"} or \code{"singular"}; \code{NULL} with \code{se = FALSE}), \code{se_note} (why
+standard errors are not available, if they are not), \code{information_eigen}
+(smallest and largest eigenvalue of the information matrix, in the parameters' units),
 \code{information_eigen_scaled} (the same for the information matrix scaled to
 unit diagonal, which \code{status} is based on), \code{threads}, \code{quadrature} (log-likelihood at the
 estimates for the node counts compared), \code{newton_decrement}, \code{vcov} (a list
@@ -115,7 +116,20 @@ that it does not depend on the units of the parameters (e.g. a moderator in
 years and its square); the covariance matrices are transformed back to the
 parameters' units. Scaling removes differences in units, not near linear
 dependence among the parameters. With \code{se = FALSE} only the gradient is
-checked (maximum absolute gradient below \code{1e-3}, which does depend on units).
+checked (maximum absolute gradient below \code{1e-3}, which does depend on units),
+and \code{status} is \code{NULL}.
+
+Estimation fails, and \code{mofia()} stops with an error of class
+\code{"mofia_estimation_error"} (message "Estimation failed: ..."), when the
+log-likelihood is not finite at the solution or, with \code{se = TRUE}, within a
+finite-difference step of it, so that the information matrix cannot be
+computed. The estimates are then at the edge of the region where the
+likelihood can be evaluated, typically in a model that is not identified:
+for example, a residual variance at the limit of double precision after a
+diverged optimization, or a singular factor correlation matrix. The message
+names the parameters concerned and the optimizer's final state. No fit is
+returned: such estimates are not a regular maximum, and after a diverged
+optimization their log-likelihood does not describe a solution.
 }
 
 \examples{

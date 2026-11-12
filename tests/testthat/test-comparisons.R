@@ -1,5 +1,5 @@
-# Independent comparisons of the likelihood, estimates and standard errors (from the
-# audit of 11 November 2026; full scripts and logs in validation/audit-2026-11-11).
+# Comparisons of likelihoods, estimates and standard errors against external
+# software and independently specified numerical references.
 # Reference software is optional: these tests are skipped when it is not installed.
 
 test_that("continuous items, binary moderator: same fit and ML/MLR SEs as lavaan multigroup", {

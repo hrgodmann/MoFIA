@@ -1,3 +1,0 @@
-closed-form logLik at MoFIA estimates: -4074.07914367 | MoFIA: -4074.07914367 | diff 0.00e+00
-independent optim from perturbed start: logLik -4074.079144, max |theta diff| vs MoFIA = 5.47e-06
-ML SEs: max relative difference closed-form vs MoFIA = 2.83e-07

@@ -1,4 +1,4 @@
-# Regression tests for the findings of the second external review (7 November 2026).
+# Regression tests for quadrature, predictions and post-estimation methods.
 
 ns <- asNamespace("MoFIA")
 
@@ -9,7 +9,7 @@ cont_fixture <- function() {
   list(d = d, m = mofia_model(d, items = paste0("y", 1:4), moderators = "x", continuous = paste0("y", 1:4)))
 }
 
-test_that("F1: score screening works with a single binary moderator; bundling equals separate tests", {
+test_that("score screening works with a single binary moderator; bundling equals separate tests", {
   skip_on_cran()
   fx <- cont_fixture(); f0 <- mofia(fx$m)
   sc <- mofia_score_test(f0)
@@ -21,7 +21,7 @@ test_that("F1: score screening works with a single binary moderator; bundling eq
   expect_equal(one$statistic, 2.561826, tolerance = 1e-5)
 })
 
-test_that("F2: Wald and score tests refuse unconverged fits", {
+test_that("Wald and score tests refuse unconverged fits", {
   skip_on_cran()
   fx <- cont_fixture()
   fu <- suppressWarnings(mofia(fx$m, control = list(iter.max = 0, eval.max = 1)))
@@ -32,7 +32,7 @@ test_that("F2: Wald and score tests refuse unconverged fits", {
   expect_warning(confint(fu), "not converged")
 })
 
-test_that("F3: models with only continuous items integrate exactly, also for concentrated posteriors", {
+test_that("models with only continuous items integrate exactly, also for concentrated posteriors", {
   set.seed(7310)
   for (D in 1:3) for (sd in c(0.1, 0.003)) {
     n <- 20; eta <- matrix(rnorm(n * D), n, D)
@@ -50,7 +50,7 @@ test_that("F3: models with only continuous items integrate exactly, also for con
   }
 })
 
-test_that("F3: the quadrature check refines the rule for very discriminating items", {
+test_that("the quadrature check refines the rule for very discriminating items", {
   skip_on_cran()
   set.seed(771); n <- 400; eta <- rnorm(n)
   d <- as.data.frame(sapply(1:4, function(j) as.integer(4 * eta + rnorm(n) > 0))); names(d) <- paste0("y", 1:4)
@@ -68,7 +68,7 @@ test_that("F3: the quadrature check refines the rule for very discriminating ite
   expect_output(print(f), "check: logLik changes")
 })
 
-test_that("F4: marginal predictions are exact (probit) or accurate (logit)", {
+test_that("marginal predictions are exact (probit) or accurate (logit)", {
   data(parabelief)
   m <- mofia_model(parabelief, items = c("SpiritsGhosts", "Aliens", "Sorcery"), moderators = "Male", sparse = 0)
   th <- get(".mofia_start", ns)(m, "probit")
@@ -85,7 +85,7 @@ test_that("F4: marginal predictions are exact (probit) or accurate (logit)", {
   expect_equal(unname(rowSums(p)), c(1, 1), tolerance = 1e-12)
 })
 
-test_that("F5: the SB2010 test refuses models not nested by parameter names", {
+test_that("the SB2010 test refuses models not nested by parameter names", {
   skip_on_cran()
   fx <- cont_fixture(); its <- paste0("y", 1:4)
   f0 <- mofia(fx$m)
@@ -95,7 +95,7 @@ test_that("F5: the SB2010 test refuses models not nested by parameter names", {
   expect_error(mofia_lrt(f0, fm, check_nested = FALSE, sb2010 = TRUE), "same identification")
 })
 
-test_that("F6: item plots work for items on any factor and for cross-loadings", {
+test_that("item plots work for items on any factor and for cross-loadings", {
   set.seed(98107); N <- 100
   d <- data.frame(x = seq(-1, 1, length.out = N)); eta <- matrix(rnorm(N * 2), N, 2)
   for (j in 1:6) d[[paste0("y", j)]] <- eta[, if (j <= 3) 1 else 2] + rnorm(N, sd = 0.6)
@@ -108,7 +108,7 @@ test_that("F6: item plots work for items on any factor and for cross-loadings", 
   expect_silent(plot(f, "items", items = "y6"))
 })
 
-test_that("F7: factor scores agree between the C++ and the R reference engine", {
+test_that("factor scores agree between the C++ and the R reference engine", {
   data(parabelief)
   f <- mofia(mofia_model(parabelief, items = c("SpiritsGhosts", "GnomesElves", "Aliens"), moderators = "Male", sparse = 0))
   s1 <- mofia_scores(f)
