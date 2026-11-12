@@ -116,7 +116,7 @@ mofia_lrt <- function(fit0, fit1, scaled = TRUE, information = c("default", "red
 # scaling correction factors of a fitted model's specification at other parameter values
 .scaling_at <- function(fit, theta) {
   nodes <- .mofia_nodes(fit$nq, fit$model$D)
-  pseudo <- fit; pseudo$coefficients <- theta
+  pseudo <- fit; pseudo$coefficients <- theta; pseudo$optimizer <- NULL   # not fit's optimizer result
   pseudo$adapt <- .mofia_adapt(theta, fit$model, fit$link, nodes)
   .mofia_se(pseudo)$scaling
 }

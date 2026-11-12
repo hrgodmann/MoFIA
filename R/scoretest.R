@@ -53,7 +53,9 @@
 #' }
 #' @details The fit must have converged (see [mofia()]); otherwise the test is
 #'   refused. Each test (parameter or item group) is checked for identification
-#'   given the fitted model and reported as `NA` if it is not identified.
+#'   given the fitted model and reported as `NA` if it is not identified, or if
+#'   the log-likelihood is not finite within a finite-difference step of the
+#'   estimates in the direction of one of its parameters.
 #' @export
 mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item"), se = c("MLR", "ML"),
                              adjust = "holm") {
@@ -75,15 +77,20 @@ mofia_score_test <- function(fit, candidates = NULL, by = c("parameter", "item")
   th <- stats::setNames(numeric(nrow(ext$par)), ext$par$name)
   th[names(fit$coefficients)] <- fit$coefficients
   nodes <- .mofia_nodes(fit$nq, ext$D)
-  sc <- function(t) attr(.mofia_ll(t, ext, fit$link, nodes, scores = TRUE, adapt = fit$adapt), "scores")
-  S <- sc(th); U <- colSums(S)
+  # scores, or NULL where the likelihood is not finite (see .ll_ok)
+  sc <- function(t) { v <- .mofia_ll(t, ext, fit$link, nodes, scores = TRUE, adapt = fit$adapt); if (.ll_ok(v)) attr(v, "scores") }
+  S <- sc(th)
+  if (is.null(S)) stop("The log-likelihood is not finite at the estimates of the fit; no score tests.", call. = FALSE)
+  U <- colSums(S)
   p0 <- names(fit$coefficients)
-  # columns of the Hessian in the candidate directions (central differences of the analytic gradient)
+  # columns of the Hessian in the candidate directions (central differences of the analytic gradient);
+  # NA where the likelihood is not finite within a step, so that the tests of that candidate are NA
   H <- matrix(0, length(th), length(candidates), dimnames = list(names(th), candidates))
   hs <- stats::setNames(.fd_steps(th, ext), names(th))
   for (a in candidates) {
     h <- hs[[a]]; e <- stats::setNames(numeric(length(th)), names(th)); e[a] <- h
-    H[, a] <- (colSums(sc(th + e)) - colSums(sc(th - e))) / (2 * h)
+    sp <- sc(th + e); sm <- sc(th - e)
+    H[, a] <- if (is.null(sp) || is.null(sm)) NA_real_ else (colSums(sp) - colSums(sm)) / (2 * h)
   }
   A00inv <- fit$vcov$exact$ML[p0, p0]
   Aa0 <- -t(H[p0, , drop = FALSE]); Aaa <- -H[candidates, , drop = FALSE]; Aaa <- (Aaa + t(Aaa)) / 2

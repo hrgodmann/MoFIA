@@ -44,6 +44,8 @@ mofia_scores <- function(object) {
   model <- object$model; theta <- object$coefficients; D <- model$D; N <- model$N
   nodes <- .mofia_nodes(object$nq, D)
   ll <- .mofia_ll(theta, model, object$link, nodes, per_person = TRUE, adapt = object$adapt, return_post = TRUE)
+  if (is.null(attr(ll, "adapt")))
+    stop("The log-likelihood is not finite at these estimates; factor scores are not available.", call. = FALSE)
   post <- .adapt_compat(attr(ll, "adapt"), D)               # z | y: mean m, Cholesky Lc
   pr <- .unpack(theta, model); st <- .structural(pr, model)
   Cf <- function(d, e) if (e > d) 0 else st$s[, d] * (if (D == 1) 1 else st$Lr[[d]][[e]])   # eta = mu + C z

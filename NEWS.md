@@ -1,5 +1,26 @@
 # MoFIA 0.1.0.9000
 
+## Diverged fits
+
+* When the log-likelihood is not finite within a finite-difference step of the
+  estimates, `mofia()` now stops with "Estimation failed: ...", naming the
+  parameters concerned and the optimizer's final state, instead of the
+  meaningless "'x' must be an array of at least two dimensions". The
+  estimates are then at the edge of the region where the likelihood can be
+  evaluated, e.g. a residual variance at the limit of double precision after a
+  diverged optimization of a three-factor model that is not identified, or a
+  singular factor correlation matrix. The information matrix cannot be
+  computed and the estimates are not a regular maximum, so no fit is returned,
+  as already when the log-likelihood is not finite at the solution itself.
+  Both errors have class
+  `"mofia_estimation_error"`. The status values are unchanged; converged fits,
+  saddle points and singular solutions are unchanged, and `se = FALSE` still
+  returns the unconverged fit with a warning.
+* `mofia_score_test()` reports a candidate as `NA` instead of failing when
+  the log-likelihood is not finite within a step in its direction.
+  `mofia_scores()` says that the log-likelihood is not finite at the estimates
+  instead of failing with an indexing error.
+
 ## Numerical stability and compatibility
 
 * The reduced information matrix is judged and inverted on the scale of the

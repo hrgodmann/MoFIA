@@ -48,7 +48,9 @@ moderation, like modification indices in SEM.
 \details{
 The fit must have converged (see \code{\link[=mofia]{mofia()}}); otherwise the test is
 refused. Each test (parameter or item group) is checked for identification
-given the fitted model and reported as \code{NA} if it is not identified.
+given the fitted model and reported as \code{NA} if it is not identified, or if
+the log-likelihood is not finite within a finite-difference step of the
+estimates in the direction of one of its parameters.
 }
 \section{Statistics}{
 
