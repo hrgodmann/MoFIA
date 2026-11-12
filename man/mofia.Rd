@@ -60,7 +60,15 @@ standard errors are not available, if they are not), \code{information_eigen}
 unit diagonal, which \code{status} is based on), \code{threads}, \code{quadrature} (log-likelihood at the
 estimates for the node counts compared), \code{newton_decrement}, \code{vcov} (a list
 of covariance matrices), \code{scaling} (robust scaling correction factors),
-\code{model}, \code{link} and \code{nq}.
+\code{optimizer} (the final \code{\link[stats:nlminb]{stats::nlminb()}} run's \code{convergence}, \code{message}
+and \code{iterations}, the number of \code{outer_iterations}, and, only if the
+monotone outer loop acted, \code{monotone}: one row per such outer iteration
+with the node count \code{nq}, its \code{iter_max} for \code{\link[stats:nlminb]{stats::nlminb()}}, the
+re-adapted log-likelihood at its start and end, the number of step
+\code{halvings} (\code{NA} if it was undone) and the resulting \code{loglik}; and, only
+if there were any, \code{exact_outer}, the number of outer iterations in which
+the adaptation was recomputed at every evaluation), \code{model}, \code{link} and
+\code{nq}.
 }
 \description{
 Estimates a moderated (nonlinear) factor model by marginal maximum
@@ -93,7 +101,13 @@ use them only as a correct-specification check.
 The factors are integrated out per person with adaptive Gauss-Hermite
 quadrature: the nodes are centred and scaled at each person's posterior. With
 only continuous items the posterior is normal and known in closed form, so
-the adaptive rule is exact. Otherwise, after fitting, the log-likelihood at
+the adaptive rule is exact. Where the posterior is very concentrated (a
+residual variance near zero, as in a Heywood case), it is computed in
+square-root form, which keeps the rule exact. At the estimates, the log-likelihood
+is also compared with its closed form (the normal density of the items); if
+they differ by more than \code{1e-6}, which only rounding at residual variances
+of about \code{1e-18} or below can cause, estimation fails (see \emph{Convergence}).
+With categorical items, after fitting, the log-likelihood at
 the estimates is recomputed with a finer rule; if it changes by more than
 \code{accuracy}, the model is refitted with the finer rule (up to three times, with
 a warning if the check still fails). Very discriminating categorical items
@@ -119,14 +133,36 @@ dependence among the parameters. With \code{se = FALSE} only the gradient is
 checked (maximum absolute gradient below \code{1e-3}, which does depend on units),
 and \code{status} is \code{NULL}.
 
+The optimizer alternates between adapting the quadrature at the current
+estimates and maximizing the log-likelihood with that adaptation held fixed
+(outer iterations, at most 20). Away from the point where it was adapted a
+fixed rule is no longer exact. So that the optimizer does not follow its
+error, an outer iteration that lowers the re-adapted log-likelihood has its
+step halved, up to 10 times, until it does not. If no halving helps, the
+iteration is undone and retried with a tenth of the iterations of
+\code{\link[stats:nlminb]{stats::nlminb()}} (down to 2), which keeps it nearer to where the rule was
+adapted; if that does not help either, the optimization stops there. A fall counts if it
+exceeds \code{1e-6} with only continuous items (whose adaptive rule is exact) and
+\code{accuracy} (default \code{0.005}) otherwise, the tolerance of the quadrature.
+With only continuous items, once the loop has had to act, and while the
+posterior of the factors is very concentrated for some person (a posterior
+standard deviation below \code{1e-4}, e.g. a residual variance near zero), the
+adaptation is instead recomputed at every evaluation, so that the optimizer
+maximizes the exact log-likelihood.
+These actions are recorded in \verb{$optimizer$monotone}. A fit that stopped this
+way is usually not at a maximum, which \code{status} and \code{converged} then show.
+
 Estimation fails, and \code{mofia()} stops with an error of class
 \code{"mofia_estimation_error"} (message "Estimation failed: ..."), when the
 log-likelihood is not finite at the solution or, with \code{se = TRUE}, within a
 finite-difference step of it, so that the information matrix cannot be
-computed. The estimates are then at the edge of the region where the
+computed, and, with only continuous items, when the log-likelihood from
+quadrature at the solution differs from its closed form (see \emph{Quadrature}).
+The estimates are then at the edge of the region where the
 likelihood can be evaluated, typically in a model that is not identified:
-for example, a residual variance at the limit of double precision after a
-diverged optimization, or a singular factor correlation matrix. The message
+for example, a residual variance at the limit of double precision (huge
+after a diverged optimization, or near zero), or a singular factor
+correlation matrix. The message
 names the parameters concerned and the optimizer's final state. No fit is
 returned: such estimates are not a regular maximum, and after a diverged
 optimization their log-likelihood does not describe a solution.

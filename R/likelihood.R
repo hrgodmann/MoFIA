@@ -223,6 +223,16 @@
 # continuous items only (normal-normal conjugacy): precision Q = I + A' Theta^-1 A with
 # A = Lambda C, mean m = Q^-1 A' Theta^-1 (y - nu - Lambda mu). Returns the adaptive
 # state (m, Lc) and, per person, the number of observed continuous items.
+#
+# Q is formed and inverted directly while its diagonal is at most .cont_qmax: then its
+# condition number is at most D * .cont_qmax, the inverse is accurate to about 1e-8
+# relative (the adaptive rule's error is of second order in it), and the posterior
+# variances stay above the floor of .chol_cov_batch(). A larger entry means a residual
+# variance near zero relative to its loading: Q's entries are then of order 1 / variance,
+# which absorbs the unit part and loses the small posterior variances (and the floor would
+# make the rule far too wide). Such persons are computed in square-root form
+# (.cont_posterior_sqrt).
+.cont_qmax <- 1e8
 .cont_posterior <- function(theta, spec, ei = .engine_inputs(theta, spec)) {
   if (is.null(ei)) return(NULL)
   N <- spec$N; P <- spec$P; D <- spec$D; cont <- which(ei$cont)
@@ -240,6 +250,11 @@
       for (e in seq_len(D)) Q[, d, e] <- Q[, d, e] + w * A[, d] * A[, e]
     }
   }
+  # persons whose posterior is concentrated (a diagonal entry of Q above .cont_qmax, i.e. a
+  # posterior variance of about 1 / .cont_qmax or less) are computed in square-root form
+  qd <- matrix(vapply(seq_len(D), function(d) Q[, d, d], numeric(N)), N, D)
+  sq <- !(is.finite(rowSums(qd)) & is.finite(rowSums(b)) & apply(qd, 1, max) <= .cont_qmax)
+  if (any(sq)) { for (d in seq_len(D)) for (e in seq_len(D)) Q[sq, d, e] <- as.numeric(d == e); b[sq, ] <- 0 }
   # batch inverse of Q via its Cholesky factor (D is small)
   L <- array(0, c(N, D, D))
   for (j in seq_len(D)) {
@@ -264,7 +279,87 @@
     m[, d] <- rowSums(matrix(Sfull[, d, ], N, D) * b)
     for (e in seq_len(d)) S[, .lt_index(d, e)] <- Sfull[, d, e]
   }
-  list(m = m, Lc = .chol_cov_batch(S, D), nobs = nobs)
+  out <- list(m = m, Lc = .chol_cov_batch(S, D), nobs = nobs)
+  if (any(sq)) { r <- .cont_posterior_sqrt(theta, spec, ei); out$m[sq, ] <- r$m[sq, ]; out$Lc[sq, ] <- r$Lc[sq, ] }
+  out
+}
+
+# Square-root form of .cont_posterior(), exact for concentrated posteriors. Q itself is
+# never formed: its triangular factor is built by Givens rotations from the identity and the
+# rows Theta^-1/2 A of the observed items (a QR factorisation of [I; Theta^-1/2 A], with the
+# right-hand side Theta^-1/2 (y - nu - Lambda mu) rotated along), in reversed coordinate
+# order so that Q = G'G with G lower triangular. Then Lc = G^-1 is lower triangular with
+# Lc Lc' = Q^-1, and m = G^-1 G'^-1 A' Theta^-1 r comes by back substitution. No explicit
+# inverse, no refactorisation, no floor; the diagonal of G is at least 1, so Lc is finite
+# whenever the inputs are.
+.cont_posterior_sqrt <- function(theta, spec, ei = .engine_inputs(theta, spec)) {
+  if (is.null(ei)) return(NULL)
+  N <- spec$N; P <- spec$P; D <- spec$D; cont <- which(ei$cont); rv <- D:1
+  Cf <- function(d, e) if (e > d) 0 else ei$CL[, .lt_index(d, e)]
+  G <- array(0, c(N, D, D)); for (d in seq_len(D)) G[, d, d] <- 1   # upper triangular in reversed order
+  rho <- matrix(0, N, D); nobs <- integer(N)
+  for (j in cont) {
+    y <- spec$Y[, j]; o <- !is.na(y); nobs <- nobs + o
+    lam <- sapply(seq_len(D), function(d) ei$LAM[, j + P * (d - 1)]); lam <- matrix(lam, N, D)
+    A <- sapply(seq_len(D), function(e) Reduce(`+`, lapply(e:D, function(d) lam[, d] * Cf(d, e)))); A <- matrix(A, N, D)
+    mu_lin <- rowSums(lam * ei$st$mu)
+    sw <- ifelse(o, 1 / sqrt(ei$RV[, j]), 0)
+    x <- A[, rv, drop = FALSE] * sw                       # the item's row, reversed
+    t <- ifelse(o, y - ei$NU[, j] - mu_lin, 0) * sw       # and its right-hand side
+    for (k in seq_len(D)) {                               # rotate row k of (G, rho) against (x, t)
+      g <- G[, k, k]; sc <- pmax(abs(g), abs(x[, k])); r <- sc * sqrt((g / sc)^2 + (x[, k] / sc)^2)
+      cs <- g / r; sn <- x[, k] / r; G[, k, k] <- r
+      if (k < D) for (l in (k + 1):D) { gl <- G[, k, l]; G[, k, l] <- cs * gl + sn * x[, l]; x[, l] <- cs * x[, l] - sn * gl }
+      rk <- rho[, k]; rho[, k] <- cs * rk + sn * t; t <- cs * t - sn * rk
+    }
+  }
+  U <- array(0, c(N, D, D)); mr <- matrix(0, N, D)       # U = G^-1 (upper), mr = G^-1 rho
+  for (i in D:1) {
+    U[, i, i] <- 1 / G[, i, i]; acc <- rho[, i]
+    if (i < D) for (j in (i + 1):D) {
+      U[, i, j] <- -Reduce(`+`, lapply((i + 1):j, function(k) G[, i, k] * U[, k, j])) / G[, i, i]
+      acc <- acc - G[, i, j] * mr[, j]
+    }
+    mr[, i] <- acc / G[, i, i]
+  }
+  Lc <- matrix(0, N, D * (D + 1) / 2); m <- matrix(0, N, D)
+  for (d in seq_len(D)) {                                 # back to the original order
+    m[, d] <- mr[, rv[d]]
+    for (e in seq_len(d)) Lc[, .lt_index(d, e)] <- U[, rv[d], rv[e]]
+  }
+  list(m = m, Lc = Lc, nobs = nobs)
+}
+
+# Closed-form log-likelihood of a model with only continuous items: y_i is normal with mean
+# nu_i + Lambda_i mu_i and covariance Sigma_i = Lambda_i C_i C_i' Lambda_i' + Theta_i, so no
+# quadrature is needed. Batch Cholesky factorisation of Sigma_i over persons; for a missing
+# item the row and column are replaced by those of the identity, with a zero residual and no
+# constant. Unlike the posterior of the factors, Sigma_i stays well conditioned when a
+# residual variance approaches zero, so this checks the quadrature independently (mofia()).
+# -Inf if the parameters are invalid; NaN where Sigma_i is not positive definite.
+.cont_loglik <- function(theta, spec, per_person = FALSE) {
+  if (!all(spec$cont)) stop("The closed-form log-likelihood needs a model with only continuous items.")
+  ei <- .engine_inputs(theta, spec); if (is.null(ei)) return(-Inf)
+  N <- spec$N; P <- spec$P; D <- spec$D; o <- !is.na(spec$Y)
+  lam <- function(j) matrix(vapply(seq_len(D), function(d) ei$LAM[, j + P * (d - 1)], numeric(N)), N, D)
+  A <- lapply(seq_len(P), function(j) {                   # rows of Lambda_i C_i
+    l <- lam(j); matrix(vapply(seq_len(D), function(e) Reduce(`+`, lapply(e:D, function(d) l[, d] * ei$CL[, .lt_index(d, e)])), numeric(N)), N, D) })
+  r <- vapply(seq_len(P), function(j) ifelse(o[, j], spec$Y[, j] - ei$NU[, j] - rowSums(lam(j) * ei$st$mu), 0), numeric(N))
+  r <- matrix(r, N, P)
+  L <- vector("list", P); z <- matrix(0, N, P); logdet <- numeric(N)
+  for (j in seq_len(P)) {
+    L[[j]] <- vector("list", j)
+    for (k in seq_len(j)) {
+      s <- rowSums(A[[j]] * A[[k]]) + (if (j == k) ei$RV[, j] else 0)
+      s <- ifelse(o[, j] & o[, k], s, as.numeric(j == k))
+      if (k > 1) for (l in seq_len(k - 1)) s <- s - L[[j]][[l]] * L[[k]][[l]]
+      L[[j]][[k]] <- if (k < j) s / L[[k]][[k]] else ifelse(s > 0, sqrt(abs(s)), NaN)
+    }
+    zz <- r[, j]; if (j > 1) for (l in seq_len(j - 1)) zz <- zz - L[[j]][[l]] * z[, l]
+    z[, j] <- zz / L[[j]][[j]]; logdet <- logdet + log(abs(L[[j]][[j]]))
+  }
+  ll <- -0.5 * (rowSums(o) * log(2 * pi) + rowSums(z^2)) - logdet
+  if (per_person) ll else sum(ll)
 }
 
 # ---- C++ engine ---------------------------------------------------------------

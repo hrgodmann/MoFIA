@@ -67,8 +67,8 @@ test_that("score tests and factor scores handle a likelihood that is not finite"
   expect_error(mofia_scores(q), "not finite at these estimates")
 })
 
-test_that("the diverged three-factor Custom model (JASP fixture F07) stops with a clear estimation error", {
-  skip_on_cran()                                     # about 30 s
+test_that("the three-factor Custom model (JASP fixture F07), not identified, stops on its ridge instead of diverging", {
+  skip_on_cran()                                     # about 15 s
   file <- test_path("fixtures", "F07.csv")           # provenance: fixtures/F07-provenance.txt
   expect_identical(unname(tools::md5sum(file)), "501dae50676fa53f902cba7073da78b5")
   raw <- utils::read.csv(file)
@@ -78,10 +78,16 @@ test_that("the diverged three-factor Custom model (JASP fixture F07) stops with 
                    continuous = items, loading_mod = character(0), threshold_mod = character(0),
                    resvar_mod = character(0), mean_mod = list(), var_mod = list(), cor_mod = FALSE,
                    identification = "variance", cov_param = "fisherz", sparse = 5)
-  # Not identified (lavaan: rank-deficient information); the optimizer diverges until a residual
-  # variance is at the limit of double precision. On the development platform (macOS arm64) the
-  # finite-difference step that overflows is the one of omega0[y8].
-  err <- expect_error(mofia(m, link = "logit"), class = "mofia_estimation_error")
-  expect_match(conditionMessage(err), "not finite within a finite-difference step of the estimates of omega0[y8]", fixed = TRUE)
-  expect_match(conditionMessage(err), "after 20 outer iteration(s)", fixed = TRUE)
+  # Not identified (lavaan: rank-deficient information, -2LL 5515.166943 on the ridge). Before E2 the optimizer
+  # followed the error of its fixed adaptive rule and diverged until a residual variance was at the limit of double
+  # precision, and the standard-error step failed (E1: an estimation error naming omega0[y8] after 20 outer
+  # iterations). With the exact posterior and the monotone outer loop it stops where the re-adapted log-likelihood
+  # stops increasing: not a maximum, but with the exact log-likelihood.
+  f <- suppressWarnings(mofia(m, link = "logit"))
+  expect_false(f$converged)
+  expect_true(f$status %in% c("saddle", "singular"))
+  expect_s3_class(f$optimizer$monotone, "data.frame")
+  expect_gt(-2 * f$loglik, 5515.166943 - 1e-3)
+  expect_lt(abs(f$loglik - get(".cont_loglik", ns)(f$coefficients, m)), 1e-6)
+  expect_lt(max(abs(f$coefficients[m$par$block == "omega0"])), 10)
 })
