@@ -11,12 +11,13 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-MoFIA fits moderated nonlinear factor analysis (MNLFA) models: factor models in
-which item parameters (loadings, thresholds or intercepts, residual variances)
-and factor parameters (means, variances, correlations) depend on moderators such
-as age or gender. Moderators can be continuous or categorical, and there can be
-any number of them. This makes it possible to test measurement invariance and
-differential item functioning (DIF) without forming groups.
+MoFIA fits moderated nonlinear factor analysis (MNLFA) models (Bauer & Hussong,
+2009; Bauer, 2017): factor models in which item parameters (loadings,
+thresholds or intercepts, residual variances) and factor parameters (means,
+variances, correlations) depend on moderators such as age or gender. Moderators
+can be continuous or categorical, and there can be any number of them, so
+measurement invariance and differential item functioning (DIF) can be tested
+without forming groups. Estimation is by marginal maximum likelihood.
 
 ## Data
 
@@ -34,24 +35,73 @@ ub <- c("SpiritsGhosts", "GnomesElves", "Aliens", "DevilPossession",
 sapply(parabelief[ub], function(x) round(prop.table(table(x)), 2))
 ```
 
-## Specifying models
+## The model
 
-A model is specified with `mofia_model()` and fitted with `mofia()`. By
-default, the factor mean and variance are moderated by all moderators, and the
-item parameters are not moderated. Moderation of item parameters is added with
-`loading_mod` and `threshold_mod`, for example as a vector of item names (these
-items, moderated by all moderators).
+For a person with moderator values `x` (a row vector, no intercept) and one
+factor `η`:
 
-To compare factor means across the moderators, at least one item must keep
-invariant parameters; here `SpiritsGhosts` serves as the anchor. Without an
-anchor, a moderated factor mean cannot be told apart from equal threshold
-shifts of all items (and a moderated factor variance from equal changes of all
-loadings); `mofia_model()` refuses such exactly unidentified models and warns
-about weakly identified ones. Moderated loadings do not rescue a model without
-anchor: for a binary moderator, the products of loading and mean moderation are
-again shifts that the thresholds absorb, so the model stays unidentified. Note
-also that threshold moderation is one shift per item and moderator, shared by
-all thresholds of the item. We fit three nested models:
+```
+factor:           η ~ N(x'γ, exp(x'δ))
+ordinal item j:   P(y_j ≥ k) = F(x'β_j + λ_j(x) η − τ_jk)
+continuous item:  y_j ~ N(ν0_j + x'β_j + λ_j(x) η, exp(ω0_j + x'ω_j))
+loadings:         λ_j(x) = λ0_j + x'λ1_j
+```
+
+`F` is the logistic distribution function (`link = "probit"` in `mofia()`
+gives the normal). Every parameter is linear in the moderators, variances on
+the log scale. The baseline parameters (`τ`, `λ0`, `ν0`, `ω0`) describe a
+person with all moderators at 0, whose factor has mean 0 and (by default)
+variance 1. In
+`parabelief`, Age is standardized and Male is 0 for women, so this baseline
+person is a woman of average age. For a moderator such as age in years, 0 lies
+outside the data; centre it or use `standardize = TRUE` so that the baseline
+describes a typical person. A positive `β_j` makes higher categories
+of item `j` more likely at the same factor value: all its thresholds shift down
+by the same amount (uniform DIF).
+
+## Specifying a model
+
+`mofia_model()` sets up the model and `mofia()` fits it. Item-level moderation
+accepts `TRUE` (all items, all moderators), `FALSE`/`NULL`, item names (these
+items, all moderators), a named list such as `list(Aliens = "Male")`, or a
+logical matrix; for factor-level moderation a character vector names
+moderators (see `?mofia_model`).
+
+| Argument | Parameters | Default | Meaning |
+|---|---|---|---|
+| `loading_mod` | `lambda1[item,factor,mod]` | none | loadings depend on `x` |
+| `threshold_mod` | `beta[item,mod]` | none | ordinal items: one shift of all thresholds per item and moderator; continuous items: the intercept |
+| `resvar_mod` | `omega[item,mod]` | none | log residual variances; continuous items only |
+| `mean_mod` | `gamma[factor,mod]` | all moderators | factor means |
+| `var_mod` | `delta[factor,mod]` | all moderators | log factor variances |
+| `cor_mod` | `zcor1[f1,f2,mod]` | none | factor correlations, on the Fisher-z scale |
+| `cov_param` | `zcor0`/`zcor1` or `cov0`/`cov1` | `"fisherz"` | `"linear"`: moderate covariances instead |
+| `continuous` | `nu0`, `omega0` instead of `tau` | none | items treated as normal |
+| `identification` | `delta0` (marker only) | `"variance"` | baseline factor variance 1, or `"marker"`: one loading per factor (`markers`) fixed to 1 |
+| `standardize` | | `FALSE` | z-scores for continuous moderators; effects per SD |
+
+Thresholds are `tau[item,k]`, baseline loadings `lambda0[item,factor]`.
+Category-specific threshold DIF is not part of the model, so tests of `beta` do
+not test it.
+
+## Anchors and three nested models
+
+Fixing the baseline mean and variance is not enough. If the factor mean and the
+thresholds of *all* items depend on Age, a higher factor mean for older people
+cannot be told apart from all thresholds shifting together; likewise, a
+moderated factor variance cannot be told apart from all loadings changing
+together. Since `mean_mod` and `var_mod` include all moderators by default, at
+least one item per factor and moderator must keep invariant parameters: an
+anchor. `mofia_model()` refuses exactly unidentified patterns and warns about
+weakly identified ones. Moderating the loadings too does not help: for a binary
+moderator, their products with the mean moderation are again absorbed by the
+thresholds.
+
+Here we choose `SpiritsGhosts` as the anchor; the score tests below examine
+that choice. The anchor defines the scale of all comparisons: `gamma` is the
+factor-mean difference as measured by the anchor, and every `beta` is DIF
+*relative to the anchor*. If the anchor itself has DIF, that DIF passes into
+`gamma` and, scaled by the loadings, into all `beta`. Three nested models:
 
 * **scalar**: no item parameter is moderated;
 * **metric**: the thresholds of all items except the anchor are moderated;
@@ -67,7 +117,7 @@ m_config <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
 m_metric
 ```
 
-## Fitting
+## Fitting and checking the fit
 
 ```{r}
 scalar <- mofia(m_scalar)
@@ -76,94 +126,147 @@ config <- mofia(m_config)
 metric
 ```
 
-`mofia()` uses the logistic link for categorical items by default
-(`link = "probit"` is also available). The factors are integrated out by
-adaptive Gauss-Hermite quadrature; after fitting, the log-likelihood is
-recomputed with a finer rule, and the model is refitted with more nodes if it
-changes noticeably (the printout shows this check). A fit counts as converged when the
-information matrix is positive definite (a maximum, not a saddle point, and an
-identified model) and the Newton decrement, the log-likelihood gain still
-available from one more Newton step, is negligible. Otherwise no standard errors
-or tests are reported.
+The factor is integrated out by adaptive Gauss-Hermite quadrature (31 nodes
+for one factor). The check in parentheses recomputes the log-likelihood with a
+finer rule; if it changes by more than `accuracy` (0.005), `mofia()` refits with
+the finer rule and warns if that does not settle it (then increase `nq`).
+"Converged" means that the information matrix is positive definite (a maximum,
+identified by these data) and that the Newton decrement, the log-likelihood
+still to be gained by one more Newton step, is below `1e-6`. If not:
+
+* `status` `"saddle"`: not a maximum; no standard errors or tests. Try random
+  starts (`starts = 5`, with a seed).
+* `status` `"singular"`: not identified by these data; check the anchors.
+* positive definite but a large decrement: standard errors come with a warning,
+  and Wald, likelihood-ratio and score tests are refused.
+* an error "Estimation failed: ..." (class `"mofia_estimation_error"`): no
+  regular maximum, typically because the model is not identified.
+
+Details: `metric$status`, `$se_note`, `$quadrature`.
 
 ## Comparing models
-
-`anova()` compares nested models with likelihood-ratio tests, by default with
-the Satorra-Bentler scaling correction for robust (MLR) estimation:
 
 ```{r}
 anova(scalar, metric, config)
 ```
 
-Moderating the thresholds improves the fit clearly, so at least some items show
-threshold DIF. Moderating the loadings does not improve it further, so the
-loadings can be treated as invariant.
+Each row tests a model against the one above it. `Chisq` is the Satorra-Bentler
+(2001) scaled difference statistic: the likelihood-ratio statistic divided by
+`Scaling`, the scaling factor of the difference, computed from the models'
+robust scaling factors (`metric$scaling`). These are close to 1 when the
+distributional assumptions hold; when `Scaling` is above 1, the unscaled test
+(`scaled = FALSE`) would be too liberal. In small samples it can be negative
+(*p* = `NA`); `mofia_lrt(fit0, fit1, sb2010 = TRUE)` adds the always positive
+Satorra-Bentler (2010) version.
 
-A Wald test checks DIF for a single item. The tested parameters can be named
-directly or selected with a regular expression:
+Moderating the thresholds improves the fit clearly, so at least some items show
+threshold DIF. Moderating the loadings does not improve it further, and AIC and
+BIC also prefer the metric model: there is no evidence of loading DIF.
+
+A Wald test needs only the larger model and tests any set of parameters, named
+or matched by a regular expression: one item's DIF, and all Age DIF:
 
 ```{r}
 mofia_wald(metric, "^beta\\[DevilPossession,", regex = TRUE)
+mofia_wald(metric, "^beta\\[.*,Age\\]$", regex = TRUE)
 ```
 
-## Screening all items at once: score tests
+## Score tests: screening all items at once
 
-Instead of fitting one model per item, `mofia_score_test()` tests every
-moderation effect that a fitted model does not contain, from that one fit
-(like modification indices). Here we screen the scalar model; `by = "item"`
-tests each item's threshold or loading moderation jointly over both moderators:
+Like modification indices, `mofia_score_test()` tests, from one fit, every
+moderation effect the model lacks. `statistic` is the robust score statistic
+(Boos, 1992), `statistic_ML` the model-based one; `p_adj` is Holm-adjusted
+across all rows. `by = "item"` pools each item's threshold or loading effects
+over the moderators:
 
 ```{r}
 screen <- mofia_score_test(scalar, by = "item")
 screen[, c("test", "df", "statistic", "p", "p_adj")]
 ```
 
-The robust statistics flag threshold DIF for Aliens, DevilPossession and
-SpiritsGhosts (Holm-adjusted *p* < .05) and no loading DIF, in line with the
-model comparisons above. SpiritsGhosts, the anchor of the models above, is
-flagged too. Tests against a scalar model are relative to the other items, and
-choosing anchors is a known difficulty of DIF analysis. The item with the
-weakest evidence for DIF (here GnomesElves) is a natural candidate for a
-sensitivity analysis with another anchor, but this is a heuristic: choosing
-anchors from the same data and then testing on these data is post-selection
-inference, and the Holm adjustment covers only the screen itself. Substantive
-arguments or independent data are the better basis for anchors.
+The screen flags threshold DIF for Aliens, DevilPossession and SpiritsGhosts
+(adjusted *p* < .05) and no loading DIF, in line with the model comparisons.
+The default `by = "parameter"` gives one test per effect with its expected
+parameter change (`epc`), the approximate estimate if the effect were added:
+
+```{r}
+mi <- mofia_score_test(metric)
+mi[grepl("Aliens|SpiritsGhosts", mi$test), c("test", "statistic", "p_adj", "epc")]
+```
+
+No loading effect survives the adjustment. The anchor's own threshold effects
+are `NA`: adding them would remove the anchor, so they are not identified.
+
+The scalar screen also flagged the anchor. Such tests are relative to the other
+items, so this does not prove DIF, but it calls for a sensitivity analysis with
+GnomesElves, the item with the weakest evidence, as anchor:
+
+```{r}
+metric_ge <- mofia(mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
+                               threshold_mod = setdiff(ub, "GnomesElves")))
+c(SpiritsGhosts = logLik(metric), GnomesElves = logLik(metric_ge))
+rbind(SpiritsGhosts = coef(metric)[c("gamma[eta,Age]", "gamma[eta,Male]")],
+      GnomesElves = coef(metric_ge)[c("gamma[eta,Age]", "gamma[eta,Male]")])
+```
+
+The fit is identical: with one anchor and invariant loadings, the anchor only
+moves effects between `gamma` and the `beta`, and the data cannot tell which
+anchor is right. The conclusions differ: measured by GnomesElves, the age
+decline of the factor mean is about a third as large, and the rest counts as
+item DIF. Choosing anchors from the same data and then testing on them is
+post-selection inference (the Holm adjustment covers only the screen). Base
+anchors on substantive arguments or independent data, and report how much the
+results depend on them.
 
 ## Parameter estimates
 
-`summary()` prints all estimates, grouped by parameter type. The table can also
-be used directly:
+`summary()` prints all estimates grouped by type; the table can be used
+directly:
 
 ```{r}
 est <- summary(metric)$coefficients
 est[est$type %in% c("beta", "gamma", "delta"), c("estimate", "se", "z", "p")]
 ```
 
-`gamma` parameters are the moderation effects on the factor mean, and `delta`
-parameters on the log factor variance. Both are on the scale of the baseline
-factor (mean 0 and variance 1 for a person with all moderators at 0). `beta`
-parameters shift all thresholds of an item. Standard errors are robust (MLR) by
-default, a sandwich with the exact observed information; `summary(fit, se =
-"ML")` and `vcov(fit, se = "ML")` give the model-based ones. The robust
-correction protects the standard errors against misspecified distributions; it
-does not make a misspecified moderation effect the quantity of scientific
-interest.
+Names give the type and its indices, e.g. `beta[item,moderator]` (all types
+under *Parameter names* in `?mofia_model`). With the logit link:
+
+* `beta[Aliens,Male]` = 1.08: at the same factor value, men's odds of answering
+  in a higher category on Aliens are exp(1.08) ≈ 2.9 times women's;
+* `gamma[eta,Male]` = −0.65: men's factor mean is 0.65 baseline SDs lower;
+* `delta[eta,Male]` = 0.42: men's factor SD is exp(0.42 / 2) ≈ 1.23 times
+  women's.
+
+Standard errors are robust (MLR) by default: a sandwich with the exact observed
+information, which protects them against misspecified distributions (it does
+not make a misspecified moderation effect the quantity of scientific interest).
+`se = "ML"` (inverse information) and `se = "MLF"` (outer product of the scores)
+assume a correct model. `information = "reduced"` drops the curvature of the
+nonlinear transformations (log variances, Fisher z); it is consistent only
+under correct specification and mainly useful to compare with software that
+computes standard errors this way. `summary()`, `vcov()`, `confint()` and
+`mofia_wald()` take both arguments; `anova()` and `mofia_lrt()` take
+`information`.
 
 ## Plots, factor scores and predictions
 
 `plot()` shows how the factor mean and SD change with a moderator, how
 moderated loadings change, or item response functions at several moderator
-values (DIF shows as curves that differ):
+values (DIF shows as curves that differ). Bands are pointwise; the factor bands
+have zero width at the baseline, where mean and variance are fixed:
 
 ```{r, fig.width = 7, fig.height = 3.5}
 plot(metric, "factors", moderator = "Age")
 plot(metric, "items", moderator = "Male", items = c("DevilPossession", "Aliens"))
 ```
 
-`mofia_scores()` gives EAP factor scores with posterior SDs (conditional on
-the estimated parameters, so they do not include estimation uncertainty), and
-`predict()` gives model-implied category probabilities or expected item scores
-for chosen moderator values. Plot bands are pointwise:
+`mofia_scores()` gives EAP factor scores with posterior SDs, on the scale of
+the model's factor (so they include the moderated means and variances) and
+conditional on the estimates (the SDs omit estimation uncertainty); attribute
+`"row_index"` matches them to the rows of the data. `predict()` gives expected
+item scores (or, with `type = "prob"`, category probabilities) for new moderator
+values on their original scale, averaged over the factor distribution at those
+values:
 
 ```{r}
 head(mofia_scores(metric), 3)
@@ -172,27 +275,33 @@ predict(metric, newdata = data.frame(Age = c(-1, 1), Male = c(0, 1)))
 
 ## Continuous items
 
-Items can also be treated as continuous (normal), with log-linearly moderated
-residual variances:
+Items can also be treated as normal (`continuous`). `threshold_mod` then
+moderates their intercepts. Their residual variances are not moderated unless
+`resvar_mod` says so; it takes the same forms as `threshold_mod`, acts on the
+log residual variances (`omega`) and is refused for categorical items:
 
 ```{r}
 m_cont <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
                       threshold_mod = others, continuous = ub)
+m_cont_rv <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
+                         threshold_mod = others, continuous = ub, resvar_mod = TRUE)
 cont <- mofia(m_cont)
-cont$scaling
+cont_rv <- mofia(m_cont_rv)
+anova(cont, cont_rv)
+c(continuous = cont$scaling[["exact"]], ordinal = metric$scaling[["exact"]])
 ```
 
-The robust scaling correction factor is well above 1, a sign that the
-normal model does not fit these skewed items well. The ordinal model's factor is
-close to 1 (`metric$scaling`). Ordinal and continuous items can also be mixed
-in one model.
+Moderated residual variances improve the fit somewhat. The robust scaling
+factor of the continuous model is well above 1, unlike the ordinal model's, a
+sign that the normal model does not describe these skewed ratings well. Ordinal
+and continuous items can also be mixed in one model.
 
 ## Formulas and model syntax
 
-Moderators can also be given as a formula. Factor variables are dummy-coded,
-and interactions and transformations are allowed; `standardize = TRUE` turns
-continuous moderators into z-scores (new data for `predict()` and plots stay
-on the original scale). The loading pattern can be written in lavaan style:
+Moderators can also be given as a formula: factor variables are dummy-coded,
+and interactions and transformations are allowed. `standardize = TRUE` turns
+continuous moderators into z-scores (new data for `predict()` and plots stay on
+the original scale). The loading pattern can be written in lavaan style:
 
 ```{r}
 m_f <- mofia_model(parabelief, loadings = "UB =~ SpiritsGhosts + GnomesElves + Aliens +
@@ -204,9 +313,9 @@ m_f$moderators
 ## More than one factor
 
 For several factors, give the loading pattern as a named list or as model
-syntax. With two
-factors, the factor correlation can be moderated as well (`cor_mod`), on the
-Fisher-z scale. This model is not run here because it takes somewhat longer:
+syntax. With two factors, the factor correlation can be moderated as well
+(`cor_mod`). Here all thresholds are moderated, so the factor means are not
+(`mean_mod = FALSE`). Not run (it takes longer):
 
 ```{r, eval = FALSE}
 eha <- c("HealingHands", "LifeCoursePossessions", "Graphology", "Dowsing",
@@ -218,11 +327,37 @@ fit2 <- mofia(m2, threads = 4)
 ```
 
 Several threads need a build with OpenMP support (not the default Apple clang on
-macOS); otherwise `mofia()` says so and computes serially.
+macOS); otherwise `mofia()` says so and computes serially. With three or more
+factors, moderated correlations are refused unless `experimental_cor = TRUE`:
+pairwise moderated correlations need not form a valid correlation matrix for
+all moderator values, and this case is not yet methodologically established.
 
-With three or more factors, moderated correlations are refused by default:
-pairwise moderated correlations need not form a valid correlation matrix for all
-moderator values, and this case is not yet methodologically established.
+## Other helpers
+
+* `mofia_collapse()` merges sparse categories (`mofia_model()` warns about
+  categories with fewer than `sparse = 5` responses). This changes the
+  measurement model, so report it.
+* `mofia_drop()` removes named moderation effects, e.g. to build the restricted
+  model for a likelihood-ratio test.
+* `mofia_simulate()` draws data from a fitted or specified model, e.g. for power
+  analyses or to check parameter recovery.
+* `mofia_loglik()` evaluates the log-likelihood at given parameter values
+  (e.g. estimates from other software) or with more quadrature nodes.
+* `tidy()` and `glance()` return the estimates and a one-row model summary as
+  data frames (with the generics or broom package loaded).
+
+## Recommended workflow
+
+1. Inspect category frequencies; collapse sparse categories if needed.
+2. Give continuous moderators a meaningful zero (`standardize = TRUE`).
+3. Choose anchors on substantive grounds, before looking at DIF tests.
+4. Fit scalar, metric and, if needed, configural models; check convergence and
+   the quadrature check.
+5. Compare them with `anova()`; test sets of effects with `mofia_wald()`.
+6. Screen with `mofia_score_test()`; treat flagged effects as hypotheses and
+   check the sensitivity to the anchor.
+7. Interpret `beta`, `gamma` and `delta` relative to the baseline person.
+8. Report the anchors, collapsed categories, the link and the tests used.
 
 ## References
 
@@ -234,6 +369,9 @@ Bauer, D. J., & Hussong, A. M. (2009). Psychometric approaches for developing
 commensurate measures across independent studies: Traditional and new models.
 *Psychological Methods, 14*(2), 101–125. https://doi.org/10.1037/a0015583
 
+Boos, D. D. (1992). On generalized score tests. *The American Statistician,
+46*(4), 327–333.
+
 Hoogeveen, S., Borsboom, D., Kucharský, Š., Marsman, M., Molenaar, D., de Ron,
 J., Sekulovski, N., Visser, I., van Elk, M., & Wagenmakers, E.-J. (2024).
 Prevalence, patterns and predictors of paranormal beliefs in The Netherlands: A
@@ -243,3 +381,6 @@ https://doi.org/10.1098/rsos.240049
 Satorra, A., & Bentler, P. M. (2001). A scaled difference chi-square test
 statistic for moment structure analysis. *Psychometrika, 66*, 507–514.
 https://doi.org/10.1007/BF02296192
+
+Satorra, A., & Bentler, P. M. (2010). Ensuring positiveness of the scaled
+difference chi-square test statistic. *Psychometrika, 75*, 243–248.
