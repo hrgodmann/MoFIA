@@ -37,7 +37,7 @@ sapply(parabelief[ub], function(x) round(prop.table(table(x)), 2))
 
 ## The model
 
-For a person with moderator values `x` (a row vector, no intercept) and one
+For a person with moderator values `x` (a column vector, no intercept) and one
 factor `η`:
 
 ```
@@ -57,7 +57,8 @@ person is a woman of average age. For a moderator such as age in years, 0 lies
 outside the data; centre it or use `standardize = TRUE` so that the baseline
 describes a typical person. A positive `β_j` makes higher categories
 of item `j` more likely at the same factor value: all its thresholds shift down
-by the same amount (uniform DIF).
+by the same amount (uniform DIF: the same at every factor value; moderated
+loadings give non-uniform DIF).
 
 ## Specifying a model
 
@@ -91,15 +92,18 @@ thresholds of *all* items depend on Age, a higher factor mean for older people
 cannot be told apart from all thresholds shifting together; likewise, a
 moderated factor variance cannot be told apart from all loadings changing
 together. Since `mean_mod` and `var_mod` include all moderators by default, at
-least one item per factor and moderator must keep invariant parameters: an
-anchor. `mofia_model()` refuses exactly unidentified patterns and warns about
-weakly identified ones. Moderating the loadings too does not help: for a binary
-moderator, their products with the mean moderation are again absorbed by the
-thresholds.
+least one item per factor and moderator must keep an invariant threshold (or
+intercept) and loading: an anchor. Its residual variance may be moderated.
+`mofia_model()` refuses exactly unidentified patterns and warns about weakly
+identified ones. For a binary moderator, moderating the loadings too does not
+help: their products with the mean moderation are again absorbed by the
+thresholds. For other moderators the model is then identified only through the
+loading moderation, with a warning.
 
-Here we choose `SpiritsGhosts` as the anchor; the score tests below examine
-that choice. The anchor defines the scale of all comparisons: `gamma` is the
-factor-mean difference as measured by the anchor, and every `beta` is DIF
+Here `SpiritsGhosts` is the anchor, chosen for illustration; in a real study the
+anchor is chosen on substantive grounds beforehand (workflow step 3). The score
+tests below flag it. The anchor defines the scale of all comparisons: `gamma` is
+the factor-mean difference as measured by the anchor, and every `beta` is DIF
 *relative to the anchor*. If the anchor itself has DIF, that DIF passes into
 `gamma` and, scaled by the loadings, into all `beta`. Three nested models:
 
@@ -117,7 +121,7 @@ m_config <- mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
 m_metric
 ```
 
-## Fitting and checking the fit
+## Fitting and checking convergence
 
 ```{r}
 scalar <- mofia(m_scalar)
@@ -142,7 +146,9 @@ still to be gained by one more Newton step, is below `1e-6`. If not:
 * an error "Estimation failed: ..." (class `"mofia_estimation_error"`): no
   regular maximum, typically because the model is not identified.
 
-Details: `metric$status`, `$se_note`, `$quadrature`.
+Details: `metric$status`, `$se_note`, `$quadrature`. MoFIA has no absolute fit
+indices (such as RMSEA or CFI); models are judged by nested comparisons, score
+tests and the scaling factors.
 
 ## Comparing models
 
@@ -160,8 +166,8 @@ distributional assumptions hold; when `Scaling` is above 1, the unscaled test
 Satorra-Bentler (2010) version.
 
 Moderating the thresholds improves the fit clearly, so at least some items show
-threshold DIF. Moderating the loadings does not improve it further, and AIC and
-BIC also prefer the metric model: there is no evidence of loading DIF.
+threshold DIF. Moderating the loadings gives no significant improvement, and AIC
+and BIC prefer the metric model.
 
 A Wald test needs only the larger model and tests any set of parameters, named
 or matched by a regular expression: one item's DIF, and all Age DIF:
@@ -170,6 +176,9 @@ or matched by a regular expression: one item's DIF, and all Age DIF:
 mofia_wald(metric, "^beta\\[DevilPossession,", regex = TRUE)
 mofia_wald(metric, "^beta\\[.*,Age\\]$", regex = TRUE)
 ```
+
+DevilPossession shows DIF (*p* = 3.5e-7), and Age DIF over the five non-anchor
+items is jointly significant (*p* = 1.5e-5).
 
 ## Score tests: screening all items at once
 
@@ -197,9 +206,11 @@ mi[grepl("Aliens|SpiritsGhosts", mi$test), c("test", "statistic", "p_adj", "epc"
 No loading effect survives the adjustment. The anchor's own threshold effects
 are `NA`: adding them would remove the anchor, so they are not identified.
 
-The scalar screen also flagged the anchor. Such tests are relative to the other
-items, so this does not prove DIF, but it calls for a sensitivity analysis with
-GnomesElves, the item with the weakest evidence, as anchor:
+The flag on the anchor does not prove DIF (such tests are relative to the other
+items), but it calls for a sensitivity analysis. As alternative anchor we take
+GnomesElves, the item with the weakest evidence. That largely reflects little
+information (83% of its answers are in the lowest category): weak evidence of
+DIF is not evidence of invariance.
 
 ```{r}
 metric_ge <- mofia(mofia_model(parabelief, items = ub, moderators = c("Age", "Male"),
@@ -250,10 +261,12 @@ computes standard errors this way. `summary()`, `vcov()`, `confint()` and
 
 ## Plots, factor scores and predictions
 
-`plot()` shows how the factor mean and SD change with a moderator, how
-moderated loadings change, or item response functions at several moderator
-values (DIF shows as curves that differ). Bands are pointwise; the factor bands
-have zero width at the baseline, where mean and variance are fixed:
+`plot()` shows how the factor mean and SD change with a moderator, how moderated
+loadings change, or item response functions at several moderator values (DIF
+shows as curves that differ). The other moderators are held at their mean
+(continuous) or at 0 / their reference level (here women, `Male` = 0); set them
+with `at`. Bands are pointwise; the factor bands have zero width at the
+baseline, where mean and variance are fixed:
 
 ```{r, fig.width = 7, fig.height = 3.5}
 plot(metric, "factors", moderator = "Age")
@@ -273,6 +286,11 @@ head(mofia_scores(metric), 3)
 predict(metric, newdata = data.frame(Age = c(-1, 1), Male = c(0, 1)))
 ```
 
+Persons 1 and 2 answered 1 on every item, so their scores differ only through
+their moderator values; such answers carry little information, hence the larger
+posterior SD (0.62 vs 0.32 for person 3). The differences between the two
+predicted rows mix the change in the factor mean with DIF.
+
 ## Continuous items
 
 Items can also be treated as normal (`continuous`). `threshold_mod` then
@@ -291,10 +309,13 @@ anova(cont, cont_rv)
 c(continuous = cont$scaling[["exact"]], ordinal = metric$scaling[["exact"]])
 ```
 
-Moderated residual variances improve the fit somewhat. The robust scaling
-factor of the continuous model is well above 1, unlike the ordinal model's, a
-sign that the normal model does not describe these skewed ratings well. Ordinal
-and continuous items can also be mixed in one model.
+The evidence for moderated residual variances is modest: the scaling factor of
+the difference is 2.60, so the unscaled statistic (about 60, twice the
+log-likelihood difference) shrinks to 23.1 on 12 df (*p* = .027), and BIC
+prefers the model without them. The robust scaling factor of the continuous
+model is well above 1, unlike the ordinal model's, a sign that the normal model
+does not describe these skewed ratings well. Ordinal and continuous items can
+also be mixed in one model.
 
 ## Formulas and model syntax
 
@@ -334,8 +355,9 @@ all moderator values, and this case is not yet methodologically established.
 
 ## Other helpers
 
-* `mofia_collapse()` merges sparse categories (`mofia_model()` warns about
-  categories with fewer than `sparse = 5` responses). This changes the
+* `mofia_collapse()` merges each category with fewer than `min_count` responses
+  (default 10) into a neighbour; separately, `mofia_model()` warns about
+  categories with fewer than `sparse` (default 5). Collapsing changes the
   measurement model, so report it.
 * `mofia_drop()` removes named moderation effects, e.g. to build the restricted
   model for a likelihood-ratio test.
