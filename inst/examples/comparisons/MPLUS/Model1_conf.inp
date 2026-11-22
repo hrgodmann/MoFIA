@@ -1,0 +1,75 @@
+TITLE:    ParaNormal configural (Model1_conf in ../MoFIA/MoFIA_Comp.R)
+DATA:     FILE = "../datasets/ParaNormal.dat";
+VARIABLE: NAMES = HealHand LifePoss Graphol Dowsing MindRead Willpow SeeFut
+          SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age Male;
+          USEVARIABLES = HealHand LifePoss Graphol Dowsing MindRead Willpow
+          SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age
+          Male;
+          CATEGORICAL = HealHand LifePoss Graphol Dowsing MindRead Willpow
+          SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted;
+          MISSING = ALL (-99);
+          CONSTRAINT = Age Male;
+ANALYSIS: TYPE = GENERAL;
+          ESTIMATOR = MLR;
+          INFORMATION = OBSERVED;
+          LINK = LOGIT;
+          ALGORITHM = INTEGRATION;
+          LOGCRITERION = 0.00001;
+MODEL:
+  [EHB@0];
+  [UB@0];
+  EHB* (fv1);
+  UB* (fv2);
+  EHB BY HealHand*;
+  EHB BY LifePoss* (ld2_1);
+  EHB BY Graphol* (ld3_1);
+  EHB BY Dowsing* (ld4_1);
+  EHB BY MindRead* (ld5_1);
+  EHB BY Willpow* (ld6_1);
+  EHB BY SeeFut* (ld7_1);
+  EHB BY SeeEvent* (ld8_1);
+  UB BY Spirits*;
+  UB BY Gnomes* (ld10_2);
+  UB BY Aliens* (ld11_2);
+  UB BY DevilPos* (ld12_2);
+  UB BY Sorcery* (ld13_2);
+  UB BY Haunted* (ld14_2);
+  EHB ON Age Male;
+  UB ON Age Male;
+  EHB WITH UB* (cv12);
+  LifePoss ON Age Male;
+  Graphol ON Age Male;
+  Dowsing ON Age Male;
+  MindRead ON Age Male;
+  Willpow ON Age Male;
+  SeeFut ON Age Male;
+  SeeEvent ON Age Male;
+  Gnomes ON Age Male;
+  Aliens ON Age Male;
+  DevilPos ON Age Male;
+  Sorcery ON Age Male;
+  Haunted ON Age Male;
+MODEL CONSTRAINT:
+  NEW(l2_1_0*1 l2_1_a*0 l2_1_m*0 l3_1_0*1 l3_1_a*0 l3_1_m*0 l4_1_0*1 l4_1_a*0
+      l4_1_m*0 l5_1_0*1 l5_1_a*0 l5_1_m*0 l6_1_0*1 l6_1_a*0 l6_1_m*0 l7_1_0*1
+      l7_1_a*0 l7_1_m*0 l8_1_0*1 l8_1_a*0 l8_1_m*0 l10_2_0*1 l10_2_a*0
+      l10_2_m*0 l11_2_0*1 l11_2_a*0 l11_2_m*0 l12_2_0*1 l12_2_a*0 l12_2_m*0
+      l13_2_0*1 l13_2_a*0 l13_2_m*0 l14_2_0*1 l14_2_a*0 l14_2_m*0 z12_0*0.3
+      z12_a*0 z12_m*0 d1_a*0 d1_m*0 d2_a*0 d2_m*0);
+  ld2_1 = l2_1_0 + l2_1_a*Age + l2_1_m*Male;
+  ld3_1 = l3_1_0 + l3_1_a*Age + l3_1_m*Male;
+  ld4_1 = l4_1_0 + l4_1_a*Age + l4_1_m*Male;
+  ld5_1 = l5_1_0 + l5_1_a*Age + l5_1_m*Male;
+  ld6_1 = l6_1_0 + l6_1_a*Age + l6_1_m*Male;
+  ld7_1 = l7_1_0 + l7_1_a*Age + l7_1_m*Male;
+  ld8_1 = l8_1_0 + l8_1_a*Age + l8_1_m*Male;
+  ld10_2 = l10_2_0 + l10_2_a*Age + l10_2_m*Male;
+  ld11_2 = l11_2_0 + l11_2_a*Age + l11_2_m*Male;
+  ld12_2 = l12_2_0 + l12_2_a*Age + l12_2_m*Male;
+  ld13_2 = l13_2_0 + l13_2_a*Age + l13_2_m*Male;
+  ld14_2 = l14_2_0 + l14_2_a*Age + l14_2_m*Male;
+  cv12 = (EXP(2*(z12_0 + z12_a*Age + z12_m*Male)) - 1) / (EXP(2*(z12_0 +
+      z12_a*Age + z12_m*Male)) + 1) * EXP((d1_a*Age + d1_m*Male + d2_a*Age +
+      d2_m*Male)/2);
+  fv1 = EXP(d1_a*Age + d1_m*Male);
+  fv2 = EXP(d2_a*Age + d2_m*Male);

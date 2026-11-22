@@ -1,0 +1,328 @@
+Mplus VERSION 8 (Mac)
+MUTHEN & MUTHEN
+11/22/2026   2:00 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:    HS39 configural (Model3_conf in ../MoFIA/MoFIA_Comp.R)
+  DATA:     FILE = "../datasets/HS39.dat";
+  VARIABLE: NAMES = x1 x2 x3 x4 x5 x6 x7 x8 x9 school;
+            USEVARIABLES = x1 x2 x3 x9 x4 x5 x6 x7 x8 school;
+            CONSTRAINT = school;
+  ANALYSIS: TYPE = GENERAL;
+            ESTIMATOR = MLR;
+            INFORMATION = OBSERVED;
+            ITERATIONS = 10000;
+            CONVERGENCE = 1.0E-8;
+  MODEL:
+    [Visual@0];
+    [Textual@0];
+    [Speed@0];
+    Visual* (fv1);
+    Textual* (fv2);
+    Speed* (fv3);
+    Visual BY x1*;
+    Visual BY x2* (ld2_1);
+    Visual BY x3* (ld3_1);
+    Visual BY x9* (ld4_1);
+    Textual BY x4*;
+    Textual BY x5* (ld6_2);
+    Textual BY x6* (ld7_2);
+    Speed BY x7*;
+    Speed BY x8* (ld9_3);
+    Speed BY x9* (ld4_3);
+    Visual ON school;
+    Textual ON school;
+    Speed ON school;
+    Visual WITH Textual* (cv12);
+    Visual WITH Speed* (cv13);
+    Textual WITH Speed* (cv23);
+    x2 ON school;
+    x3 ON school;
+    x9 ON school;
+    x5 ON school;
+    x6 ON school;
+    x8 ON school;
+    x1* (rv1);
+    x2* (rv2);
+    x3* (rv3);
+    x9* (rv4);
+    x4* (rv5);
+    x5* (rv6);
+    x6* (rv7);
+    x7* (rv8);
+    x8* (rv9);
+  MODEL CONSTRAINT:
+    NEW(l2_1_0*1 l2_1_s*0 l3_1_0*1 l3_1_s*0 l4_1_0*1 l4_1_s*0 l6_2_0*1 l6_2_s*0
+        l7_2_0*1 l7_2_s*0 l9_3_0*1 l9_3_s*0 l4_3_0*1 l4_3_s*0 z12_0*0.3
+        z13_0*0.3 z23_0*0.3 w1_0*-0.5 w1_s*0 w2_0*-0.5 w2_s*0 w3_0*-0.5 w3_s*0
+        w4_0*-0.5 w4_s*0 w5_0*-0.5 w5_s*0 w6_0*-0.5 w6_s*0 w7_0*-0.5 w7_s*0
+        w8_0*-0.5 w8_s*0 w9_0*-0.5 w9_s*0 d1_s*0 d2_s*0 d3_s*0);
+    ld2_1 = l2_1_0 + l2_1_s*school;
+    ld3_1 = l3_1_0 + l3_1_s*school;
+    ld4_1 = l4_1_0 + l4_1_s*school;
+    ld6_2 = l6_2_0 + l6_2_s*school;
+    ld7_2 = l7_2_0 + l7_2_s*school;
+    ld9_3 = l9_3_0 + l9_3_s*school;
+    ld4_3 = l4_3_0 + l4_3_s*school;
+    cv12 = (EXP(2*(z12_0)) - 1) / (EXP(2*(z12_0)) + 1) * EXP((d1_s*school +
+        d2_s*school)/2);
+    cv13 = (EXP(2*(z13_0)) - 1) / (EXP(2*(z13_0)) + 1) * EXP((d1_s*school +
+        d3_s*school)/2);
+    cv23 = (EXP(2*(z23_0)) - 1) / (EXP(2*(z23_0)) + 1) * EXP((d2_s*school +
+        d3_s*school)/2);
+    rv1 = EXP(w1_0 + w1_s*school);
+    rv2 = EXP(w2_0 + w2_s*school);
+    rv3 = EXP(w3_0 + w3_s*school);
+    rv4 = EXP(w4_0 + w4_s*school);
+    rv5 = EXP(w5_0 + w5_s*school);
+    rv6 = EXP(w6_0 + w6_s*school);
+    rv7 = EXP(w7_0 + w7_s*school);
+    rv8 = EXP(w8_0 + w8_s*school);
+    rv9 = EXP(w9_0 + w9_s*school);
+    fv1 = EXP(d1_s*school);
+    fv2 = EXP(d2_s*school);
+    fv3 = EXP(d3_s*school);
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+HS39 configural (Model3_conf in ../MoFIA/MoFIA_Comp.R)
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 1
+Number of observations                                         301
+
+Number of dependent variables                                    9
+Number of independent variables                                  1
+Number of continuous latent variables                            3
+
+Observed dependent variables
+
+  Continuous
+   X1          X2          X3          X9          X4          X5
+   X6          X7          X8
+
+Observed independent variables
+   SCHOOL
+
+Continuous latent variables
+   VISUAL      TEXTUAL     SPEED
+
+
+Estimator                                                      MLR
+Information matrix                                        OBSERVED
+Maximum number of iterations                                 10000
+Convergence criterion                                    0.100D-07
+Maximum number of steepest descent iterations                   20
+
+Input data file(s)
+  ../datasets/HS39.dat
+
+Input data format  FREE
+
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     X1                    4.936      -0.256       0.667    0.33%       4.000      4.667      5.000
+             301.000       1.358       0.330       8.500    0.33%       5.333      5.833
+     X2                    6.088       0.472       2.250    0.33%       5.250      5.750      6.000
+             301.000       1.382       0.355       9.250    1.66%       6.250      7.000
+     X3                    2.250       0.385       0.250    0.33%       1.250      1.750      2.125
+             301.000       1.275      -0.894       4.500    1.99%       2.375      3.375
+     X9                    5.374       0.205       2.778    0.33%       4.500      5.083      5.417
+             301.000       1.015       0.312       9.250    0.33%       5.611      6.222
+     X4                    3.061       0.269       0.000    0.33%       2.000      2.667      3.000
+             301.000       1.351       0.101       6.333    0.33%       3.333      4.000
+     X5                    4.341      -0.352       1.000    0.66%       3.000      4.000      4.500
+             301.000       1.660      -0.536       7.000    0.33%       4.750      5.500
+     X6                    2.186       0.862       0.143    0.66%       1.286      1.857      2.000
+             301.000       1.196       0.842       6.143    0.33%       2.286      2.857
+     X7                    4.186       0.250       1.304    0.33%       3.304      3.783      4.087
+             301.000       1.183      -0.289       7.435    0.33%       4.391      5.130
+     X8                    5.527       0.528       3.050    0.33%       4.700      5.250      5.500
+             301.000       1.022       1.199      10.000    0.33%       5.700      6.300
+     SCHOOL                0.518      -0.073       0.000   48.17%       0.000      0.000      1.000
+             301.000       0.250      -1.995       1.000   51.83%       1.000      1.000
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       59
+
+Loglikelihood
+
+          H0 Value                       -3666.313
+          H0 Scaling Correction Factor      1.0835
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                    7450.627
+          Bayesian (BIC)                  7669.346
+          Sample-Size Adjusted BIC        7482.232
+            (n* = (n + 2) / 24)
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ VISUAL   BY
+    X1                 0.809      0.114      7.068      0.000
+    X2               999.000      0.000    999.000    999.000
+    X3               999.000      0.000    999.000    999.000
+    X9               999.000      0.000    999.000    999.000
+
+ TEXTUAL  BY
+    X4                 0.963      0.081     11.954      0.000
+    X5               999.000      0.000    999.000    999.000
+    X6               999.000      0.000    999.000    999.000
+
+ SPEED    BY
+    X7                 0.730      0.092      7.978      0.000
+    X8               999.000      0.000    999.000    999.000
+    X9               999.000      0.000    999.000    999.000
+
+ VISUAL   ON
+    SCHOOL             0.014      0.166      0.084      0.933
+
+ TEXTUAL  ON
+    SCHOOL            -0.513      0.137     -3.753      0.000
+
+ SPEED    ON
+    SCHOOL             0.701      0.188      3.720      0.000
+
+ X2       ON
+    SCHOOL            -0.222      0.130     -1.699      0.089
+
+ X3       ON
+    SCHOOL             0.484      0.118      4.104      0.000
+
+ X9       ON
+    SCHOOL            -0.271      0.132     -2.053      0.040
+
+ X5       ON
+    SCHOOL            -0.129      0.130     -0.992      0.321
+
+ X6       ON
+    SCHOOL            -0.113      0.109     -1.033      0.301
+
+ X8       ON
+    SCHOOL            -0.527      0.207     -2.546      0.011
+
+ VISUAL   WITH
+    TEXTUAL          999.000      0.000    999.000    999.000
+    SPEED            999.000      0.000    999.000    999.000
+
+ TEXTUAL  WITH
+    SPEED            999.000      0.000    999.000    999.000
+
+ Intercepts
+    X1                 4.930      0.095     51.696      0.000
+    X2                 6.200      0.092     67.416      0.000
+    X3                 1.996      0.086     23.195      0.000
+    X9                 5.327      0.085     62.571      0.000
+    X4                 3.317      0.093     35.625      0.000
+    X5                 4.712      0.096     48.986      0.000
+    X6                 2.469      0.094     26.277      0.000
+    X7                 3.921      0.086     45.819      0.000
+    X8                 5.488      0.087     63.174      0.000
+    VISUAL             0.000      0.000    999.000    999.000
+    TEXTUAL            0.000      0.000    999.000    999.000
+    SPEED              0.000      0.000    999.000    999.000
+
+ Residual Variances
+    X1               999.000      0.000    999.000    999.000
+    X2               999.000      0.000    999.000    999.000
+    X3               999.000      0.000    999.000    999.000
+    X9               999.000      0.000    999.000    999.000
+    X4               999.000      0.000    999.000    999.000
+    X5               999.000      0.000    999.000    999.000
+    X6               999.000      0.000    999.000    999.000
+    X7               999.000      0.000    999.000    999.000
+    X8               999.000      0.000    999.000    999.000
+    VISUAL           999.000      0.000    999.000    999.000
+    TEXTUAL          999.000      0.000    999.000    999.000
+    SPEED            999.000      0.000    999.000    999.000
+
+New/Additional Parameters
+    L2_1_0             0.544      0.101      5.373      0.000
+    L2_1_S            -0.152      0.196     -0.778      0.437
+    L3_1_0             0.687      0.098      7.003      0.000
+    L3_1_S            -0.140      0.212     -0.663      0.507
+    L4_1_0             0.451      0.093      4.822      0.000
+    L4_1_S            -0.206      0.137     -1.500      0.134
+    L6_2_0             0.956      0.081     11.768      0.000
+    L6_2_S             0.189      0.138      1.372      0.170
+    L7_2_0             0.926      0.080     11.601      0.000
+    L7_2_S            -0.081      0.122     -0.664      0.506
+    L9_3_0             0.859      0.106      8.132      0.000
+    L9_3_S             0.001      0.271      0.002      0.998
+    L4_3_0             0.483      0.093      5.167      0.000
+    L4_3_S             0.028      0.151      0.186      0.852
+    Z12_0              0.560      0.094      5.985      0.000
+    Z13_0              0.293      0.097      3.019      0.003
+    Z23_0              0.267      0.088      3.055      0.002
+    W1_0              -0.430      0.270     -1.595      0.111
+    W1_S              -0.326      0.579     -0.563      0.573
+    W2_0              -0.079      0.157     -0.502      0.616
+    W2_S               0.331      0.206      1.604      0.109
+    W3_0              -0.526      0.191     -2.761      0.006
+    W3_S               0.445      0.245      1.816      0.069
+    W4_0              -0.767      0.170     -4.506      0.000
+    W4_S               0.344      0.231      1.491      0.136
+    W5_0              -1.153      0.210     -5.482      0.000
+    W5_S               0.309      0.270      1.144      0.253
+    W6_0              -0.881      0.172     -5.120      0.000
+    W6_S               0.083      0.255      0.325      0.745
+    W7_0              -0.893      0.185     -4.820      0.000
+    W7_S              -0.345      0.267     -1.295      0.195
+    W8_0              -0.647      0.185     -3.491      0.000
+    W8_S               0.433      0.236      1.834      0.067
+    W9_0              -1.052      0.405     -2.598      0.009
+    W9_S               0.251      0.469      0.534      0.593
+    D1_S               0.368      0.422      0.872      0.383
+    D2_S              -0.029      0.236     -0.121      0.904
+    D3_S              -0.374      0.435     -0.861      0.389
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.216E-03
+       (ratio of smallest to largest eigenvalue)
+
+
+     Beginning Time:  02:00:06
+        Ending Time:  02:00:12
+       Elapsed Time:  00:00:06
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2017 Muthen & Muthen

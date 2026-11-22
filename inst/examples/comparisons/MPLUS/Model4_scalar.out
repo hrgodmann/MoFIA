@@ -1,0 +1,350 @@
+Mplus VERSION 8 (Mac)
+MUTHEN & MUTHEN
+11/22/2026   2:00 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:    BFI2 scalar (Model4_scalar in ../MoFIA/MoFIA_Comp.R)
+  DATA:     FILE = "../datasets/BFI2.dat";
+  VARIABLE: NAMES = i4 i19 i34 i49 i9 i24 i39 i54 Gender Age;
+            USEVARIABLES = i4 i19 i34 i49 i9 i24 i39 i54 Age Gender;
+            CATEGORICAL = i4 i19 i34 i49 i9 i24 i39 i54;
+            CONSTRAINT = Age Gender;
+  ANALYSIS: TYPE = GENERAL;
+            ESTIMATOR = MLR;
+            INFORMATION = OBSERVED;
+            LINK = LOGIT;
+            ALGORITHM = INTEGRATION;
+            LOGCRITERION = 0.00001;
+  MODEL:
+    [Anxiety@0];
+    [Depress@0];
+    Anxiety* (fv1);
+    Depress* (fv2);
+    Anxiety BY i4*;
+    Anxiety BY i19*;
+    Anxiety BY i34*;
+    Anxiety BY i49*;
+    Depress BY i9*;
+    Depress BY i24*;
+    Depress BY i39*;
+    Depress BY i54*;
+    Anxiety ON Age Gender;
+    Depress ON Age Gender;
+    Anxiety WITH Depress* (cv12);
+  MODEL CONSTRAINT:
+    NEW(z12_0*0.3 z12_a*0 z12_g*0 d1_a*0 d1_g*0 d2_a*0 d2_g*0);
+    cv12 = (EXP(2*(z12_0 + z12_a*Age + z12_g*Gender)) - 1) / (EXP(2*(z12_0 +
+        z12_a*Age + z12_g*Gender)) + 1) * EXP((d1_a*Age + d1_g*Gender + d2_a*Age
+        + d2_g*Gender)/2);
+    fv1 = EXP(d1_a*Age + d1_g*Gender);
+    fv2 = EXP(d2_a*Age + d2_g*Gender);
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+BFI2 scalar (Model4_scalar in ../MoFIA/MoFIA_Comp.R)
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 1
+Number of observations                                        1733
+
+Number of dependent variables                                    8
+Number of independent variables                                  2
+Number of continuous latent variables                            2
+
+Observed dependent variables
+
+  Binary and ordered categorical (ordinal)
+   I4          I19         I34         I49         I9          I24
+   I39         I54
+
+Observed independent variables
+   AGE         GENDER
+
+Continuous latent variables
+   ANXIETY     DEPRESS
+
+
+Estimator                                                      MLR
+Information matrix                                        OBSERVED
+Optimization Specifications for the Quasi-Newton Algorithm for
+Continuous Outcomes
+  Maximum number of iterations                                 100
+  Convergence criterion                                  0.100D-05
+Optimization Specifications for the EM Algorithm
+  Maximum number of iterations                                 500
+  Convergence criteria
+    Loglikelihood change                                 0.100D-04
+    Relative loglikelihood change                        0.100D-05
+    Derivative                                           0.100D-02
+Optimization Specifications for the M step of the EM Algorithm for
+Categorical Latent variables
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+Optimization Specifications for the M step of the EM Algorithm for
+Censored, Binary or Ordered Categorical (Ordinal), Unordered
+Categorical (Nominal) and Count Outcomes
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+  Maximum value for logit thresholds                            15
+  Minimum value for logit thresholds                           -15
+  Minimum expected cell size for chi-square              0.100D-01
+Optimization algorithm                                         EMA
+Integration Specifications
+  Type                                                    STANDARD
+  Number of integration points                                  15
+  Dimensions of numerical integration                            2
+  Adaptive quadrature                                           ON
+Link                                                         LOGIT
+Cholesky                                                        ON
+
+Input data file(s)
+  ../datasets/BFI2.dat
+Input data format  FREE
+
+
+UNIVARIATE PROPORTIONS AND COUNTS FOR CATEGORICAL VARIABLES
+
+    I4
+      Category 1    0.086          149.000
+      Category 2    0.264          457.000
+      Category 3    0.251          435.000
+      Category 4    0.299          519.000
+      Category 5    0.100          173.000
+    I19
+      Category 1    0.063          110.000
+      Category 2    0.275          477.000
+      Category 3    0.265          460.000
+      Category 4    0.321          557.000
+      Category 5    0.074          129.000
+    I34
+      Category 1    0.035           60.000
+      Category 2    0.174          301.000
+      Category 3    0.201          348.000
+      Category 4    0.391          677.000
+      Category 5    0.200          347.000
+    I49
+      Category 1    0.061          105.000
+      Category 2    0.210          364.000
+      Category 3    0.238          413.000
+      Category 4    0.358          620.000
+      Category 5    0.133          231.000
+    I9
+      Category 1    0.143          247.000
+      Category 2    0.356          617.000
+      Category 3    0.238          413.000
+      Category 4    0.205          355.000
+      Category 5    0.058          101.000
+    I24
+      Category 1    0.096          167.000
+      Category 2    0.325          564.000
+      Category 3    0.261          453.000
+      Category 4    0.226          392.000
+      Category 5    0.091          157.000
+    I39
+      Category 1    0.145          252.000
+      Category 2    0.319          552.000
+      Category 3    0.229          397.000
+      Category 4    0.208          361.000
+      Category 5    0.099          171.000
+    I54
+      Category 1    0.179          311.000
+      Category 2    0.299          518.000
+      Category 3    0.202          350.000
+      Category 4    0.236          409.000
+      Category 5    0.084          145.000
+
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     AGE                   0.000       0.246      -1.995    1.67%      -0.811     -0.417     -0.022
+            1733.000       0.999      -0.579       2.346    1.90%      -0.022      0.768
+     GENDER                0.421       0.319       0.000   57.88%       0.000      0.000      0.000
+            1733.000       0.244      -1.898       1.000   42.12%       1.000      1.000
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                       51
+
+Loglikelihood
+
+          H0 Value                      -18256.626
+          H0 Scaling Correction Factor      1.0637
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                   36615.251
+          Bayesian (BIC)                 36893.589
+          Sample-Size Adjusted BIC       36731.567
+            (n* = (n + 2) / 24)
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ ANXIETY  BY
+    I4                 1.857      0.104     17.815      0.000
+    I19                1.512      0.095     15.950      0.000
+    I34                1.646      0.099     16.643      0.000
+    I49                1.520      0.095     16.049      0.000
+
+ DEPRESS  BY
+    I9                 1.167      0.074     15.870      0.000
+    I24                1.159      0.070     16.662      0.000
+    I39                2.945      0.179     16.433      0.000
+    I54                3.026      0.199     15.223      0.000
+
+ ANXIETY    ON
+    AGE               -0.012      0.029     -0.406      0.685
+    GENDER            -0.557      0.062     -8.948      0.000
+
+ DEPRESS    ON
+    AGE               -0.072      0.028     -2.593      0.010
+    GENDER            -0.240      0.059     -4.071      0.000
+
+ ANXIETY  WITH
+    DEPRESS          999.000      0.000    999.000    999.000
+
+ Intercepts
+    ANXIETY            0.000      0.000    999.000    999.000
+    DEPRESS            0.000      0.000    999.000    999.000
+
+ Thresholds
+    I4$1              -4.022      0.170    -23.610      0.000
+    I4$2              -1.454      0.104    -13.998      0.000
+    I4$3               0.169      0.089      1.902      0.057
+    I4$4               2.925      0.129     22.757      0.000
+    I19$1             -3.967      0.149    -26.695      0.000
+    I19$2             -1.325      0.085    -15.561      0.000
+    I19$3              0.226      0.078      2.913      0.004
+    I19$4              3.088      0.132     23.412      0.000
+    I34$1             -4.921      0.193    -25.476      0.000
+    I34$2             -2.329      0.111    -21.002      0.000
+    I34$3             -0.928      0.087    -10.674      0.000
+    I34$4              1.668      0.098     16.964      0.000
+    I49$1             -4.046      0.165    -24.470      0.000
+    I49$2             -1.779      0.100    -17.719      0.000
+    I49$3             -0.344      0.081     -4.226      0.000
+    I49$4              2.245      0.103     21.721      0.000
+    I9$1              -2.379      0.099    -24.084      0.000
+    I9$2              -0.156      0.068     -2.290      0.022
+    I9$3               1.157      0.072     16.014      0.000
+    I9$4               3.257      0.117     27.865      0.000
+    I24$1             -2.877      0.111    -26.018      0.000
+    I24$2             -0.559      0.069     -8.107      0.000
+    I24$3              0.808      0.067     12.025      0.000
+    I24$4              2.719      0.099     27.333      0.000
+    I39$1             -4.006      0.207    -19.345      0.000
+    I39$2             -0.672      0.125     -5.389      0.000
+    I39$3              1.432      0.137     10.473      0.000
+    I39$4              4.336      0.231     18.737      0.000
+    I54$1             -3.612      0.207    -17.472      0.000
+    I54$2             -0.568      0.127     -4.483      0.000
+    I54$3              1.318      0.142      9.303      0.000
+    I54$4              4.763      0.272     17.528      0.000
+
+ Residual Variances
+    ANXIETY          999.000      0.000    999.000    999.000
+    DEPRESS          999.000      0.000    999.000    999.000
+
+New/Additional Parameters
+    Z12_0              1.110      0.071     15.594      0.000
+    Z12_A             -0.029      0.055     -0.516      0.606
+    Z12_G              0.336      0.130      2.577      0.010
+    D1_A              -0.039      0.049     -0.794      0.427
+    D1_G               0.094      0.108      0.868      0.385
+    D2_A              -0.075      0.048     -1.567      0.117
+    D2_G               0.219      0.097      2.270      0.023
+
+
+BRANT WALD TEST FOR PROPORTIONAL ODDS
+
+                                   Degrees of
+                      Chi-Square     Freedom   P-Value
+
+  I4
+    Overall test          12.603         6      0.050
+    AGE                    9.547         3      0.023
+    GENDER                 2.933         3      0.402
+
+  I19
+    Overall test           7.992         6      0.239
+    AGE                    4.540         3      0.209
+    GENDER                 3.503         3      0.320
+
+  I34
+    Overall test           6.033         6      0.419
+    AGE                    2.751         3      0.432
+    GENDER                 3.210         3      0.360
+
+  I49
+    Overall test           4.784         6      0.572
+    AGE                    0.942         3      0.815
+    GENDER                 3.851         3      0.278
+
+  I9
+    Overall test          15.598         6      0.016
+    AGE                   12.397         3      0.006
+    GENDER                 3.019         3      0.389
+
+  I24
+    Overall test          11.072         6      0.086
+    AGE                    8.436         3      0.038
+    GENDER                 2.637         3      0.451
+
+  I39
+    Overall test           6.761         6      0.344
+    AGE                    6.353         3      0.096
+    GENDER                 0.377         3      0.945
+
+  I54
+    Overall test           5.274         6      0.509
+    AGE                    0.419         3      0.936
+    GENDER                 4.859         3      0.182
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.243E-03
+       (ratio of smallest to largest eigenvalue)
+
+
+     Beginning Time:  02:00:06
+        Ending Time:  02:01:07
+       Elapsed Time:  00:01:01
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2017 Muthen & Muthen

@@ -1,0 +1,41 @@
+TITLE:    BFI2 metric (Model4_metric in ../MoFIA/MoFIA_Comp.R)
+DATA:     FILE = "../datasets/BFI2.dat";
+VARIABLE: NAMES = i4 i19 i34 i49 i9 i24 i39 i54 Gender Age;
+          USEVARIABLES = i4 i19 i34 i49 i9 i24 i39 i54 Age Gender;
+          CATEGORICAL = i4 i19 i34 i49 i9 i24 i39 i54;
+          CONSTRAINT = Age Gender;
+ANALYSIS: TYPE = GENERAL;
+          ESTIMATOR = MLR;
+          INFORMATION = OBSERVED;
+          LINK = LOGIT;
+          ALGORITHM = INTEGRATION;
+          LOGCRITERION = 0.00001;
+MODEL:
+  [Anxiety@0];
+  [Depress@0];
+  Anxiety* (fv1);
+  Depress* (fv2);
+  Anxiety BY i4*;
+  Anxiety BY i19*;
+  Anxiety BY i34*;
+  Anxiety BY i49*;
+  Depress BY i9*;
+  Depress BY i24*;
+  Depress BY i39*;
+  Depress BY i54*;
+  Anxiety ON Age Gender;
+  Depress ON Age Gender;
+  Anxiety WITH Depress* (cv12);
+  i19 ON Age Gender;
+  i34 ON Age Gender;
+  i49 ON Age Gender;
+  i24 ON Age Gender;
+  i39 ON Age Gender;
+  i54 ON Age Gender;
+MODEL CONSTRAINT:
+  NEW(z12_0*0.3 z12_a*0 z12_g*0 d1_a*0 d1_g*0 d2_a*0 d2_g*0);
+  cv12 = (EXP(2*(z12_0 + z12_a*Age + z12_g*Gender)) - 1) / (EXP(2*(z12_0 +
+      z12_a*Age + z12_g*Gender)) + 1) * EXP((d1_a*Age + d1_g*Gender + d2_a*Age
+      + d2_g*Gender)/2);
+  fv1 = EXP(d1_a*Age + d1_g*Gender);
+  fv2 = EXP(d2_a*Age + d2_g*Gender);
