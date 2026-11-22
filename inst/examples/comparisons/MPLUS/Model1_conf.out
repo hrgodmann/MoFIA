@@ -1,0 +1,681 @@
+Mplus VERSION 8 (Mac)
+MUTHEN & MUTHEN
+11/22/2026   2:00 AM
+
+INPUT INSTRUCTIONS
+
+  TITLE:    ParaNormal configural (Model1_conf in ../MoFIA/MoFIA_Comp.R)
+  DATA:     FILE = "../datasets/ParaNormal.dat";
+  VARIABLE: NAMES = HealHand LifePoss Graphol Dowsing MindRead Willpow SeeFut
+            SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age Male;
+            USEVARIABLES = HealHand LifePoss Graphol Dowsing MindRead Willpow
+            SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age
+            Male;
+            CATEGORICAL = HealHand LifePoss Graphol Dowsing MindRead Willpow
+            SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted;
+            MISSING = ALL (-99);
+            CONSTRAINT = Age Male;
+  ANALYSIS: TYPE = GENERAL;
+            ESTIMATOR = MLR;
+            INFORMATION = OBSERVED;
+            LINK = LOGIT;
+            ALGORITHM = INTEGRATION;
+            LOGCRITERION = 0.00001;
+  MODEL:
+    [EHB@0];
+    [UB@0];
+    EHB* (fv1);
+    UB* (fv2);
+    EHB BY HealHand*;
+    EHB BY LifePoss* (ld2_1);
+    EHB BY Graphol* (ld3_1);
+    EHB BY Dowsing* (ld4_1);
+    EHB BY MindRead* (ld5_1);
+    EHB BY Willpow* (ld6_1);
+    EHB BY SeeFut* (ld7_1);
+    EHB BY SeeEvent* (ld8_1);
+    UB BY Spirits*;
+    UB BY Gnomes* (ld10_2);
+    UB BY Aliens* (ld11_2);
+    UB BY DevilPos* (ld12_2);
+    UB BY Sorcery* (ld13_2);
+    UB BY Haunted* (ld14_2);
+    EHB ON Age Male;
+    UB ON Age Male;
+    EHB WITH UB* (cv12);
+    LifePoss ON Age Male;
+    Graphol ON Age Male;
+    Dowsing ON Age Male;
+    MindRead ON Age Male;
+    Willpow ON Age Male;
+    SeeFut ON Age Male;
+    SeeEvent ON Age Male;
+    Gnomes ON Age Male;
+    Aliens ON Age Male;
+    DevilPos ON Age Male;
+    Sorcery ON Age Male;
+    Haunted ON Age Male;
+  MODEL CONSTRAINT:
+    NEW(l2_1_0*1 l2_1_a*0 l2_1_m*0 l3_1_0*1 l3_1_a*0 l3_1_m*0 l4_1_0*1 l4_1_a*0
+        l4_1_m*0 l5_1_0*1 l5_1_a*0 l5_1_m*0 l6_1_0*1 l6_1_a*0 l6_1_m*0 l7_1_0*1
+        l7_1_a*0 l7_1_m*0 l8_1_0*1 l8_1_a*0 l8_1_m*0 l10_2_0*1 l10_2_a*0
+        l10_2_m*0 l11_2_0*1 l11_2_a*0 l11_2_m*0 l12_2_0*1 l12_2_a*0 l12_2_m*0
+        l13_2_0*1 l13_2_a*0 l13_2_m*0 l14_2_0*1 l14_2_a*0 l14_2_m*0 z12_0*0.3
+        z12_a*0 z12_m*0 d1_a*0 d1_m*0 d2_a*0 d2_m*0);
+    ld2_1 = l2_1_0 + l2_1_a*Age + l2_1_m*Male;
+    ld3_1 = l3_1_0 + l3_1_a*Age + l3_1_m*Male;
+    ld4_1 = l4_1_0 + l4_1_a*Age + l4_1_m*Male;
+    ld5_1 = l5_1_0 + l5_1_a*Age + l5_1_m*Male;
+    ld6_1 = l6_1_0 + l6_1_a*Age + l6_1_m*Male;
+    ld7_1 = l7_1_0 + l7_1_a*Age + l7_1_m*Male;
+    ld8_1 = l8_1_0 + l8_1_a*Age + l8_1_m*Male;
+    ld10_2 = l10_2_0 + l10_2_a*Age + l10_2_m*Male;
+    ld11_2 = l11_2_0 + l11_2_a*Age + l11_2_m*Male;
+    ld12_2 = l12_2_0 + l12_2_a*Age + l12_2_m*Male;
+    ld13_2 = l13_2_0 + l13_2_a*Age + l13_2_m*Male;
+    ld14_2 = l14_2_0 + l14_2_a*Age + l14_2_m*Male;
+    cv12 = (EXP(2*(z12_0 + z12_a*Age + z12_m*Male)) - 1) / (EXP(2*(z12_0 +
+        z12_a*Age + z12_m*Male)) + 1) * EXP((d1_a*Age + d1_m*Male + d2_a*Age +
+        d2_m*Male)/2);
+    fv1 = EXP(d1_a*Age + d1_m*Male);
+    fv2 = EXP(d2_a*Age + d2_m*Male);
+
+
+
+INPUT READING TERMINATED NORMALLY
+
+
+
+ParaNormal configural (Model1_conf in ../MoFIA/MoFIA_Comp.R)
+
+SUMMARY OF ANALYSIS
+
+Number of groups                                                 1
+Number of observations                                        2608
+
+Number of dependent variables                                   14
+Number of independent variables                                  2
+Number of continuous latent variables                            2
+
+Observed dependent variables
+
+  Binary and ordered categorical (ordinal)
+   HEALHAND    LIFEPOSS    GRAPHOL     DOWSING     MINDREAD    WILLPOW
+   SEEFUT      SEEEVENT    SPIRITS     GNOMES      ALIENS      DEVILPOS
+   SORCERY     HAUNTED
+
+Observed independent variables
+   AGE         MALE
+
+Continuous latent variables
+   EHB         UB
+
+
+Estimator                                                      MLR
+Information matrix                                        OBSERVED
+Optimization Specifications for the Quasi-Newton Algorithm for
+Continuous Outcomes
+  Maximum number of iterations                                 100
+  Convergence criterion                                  0.100D-05
+Optimization Specifications for the EM Algorithm
+  Maximum number of iterations                                 500
+  Convergence criteria
+    Loglikelihood change                                 0.100D-04
+    Relative loglikelihood change                        0.100D-05
+    Derivative                                           0.100D-02
+Optimization Specifications for the M step of the EM Algorithm for
+Categorical Latent variables
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+Optimization Specifications for the M step of the EM Algorithm for
+Censored, Binary or Ordered Categorical (Ordinal), Unordered
+Categorical (Nominal) and Count Outcomes
+  Number of M step iterations                                    1
+  M step convergence criterion                           0.100D-02
+  Basis for M step termination                           ITERATION
+  Maximum value for logit thresholds                            15
+  Minimum value for logit thresholds                           -15
+  Minimum expected cell size for chi-square              0.100D-01
+Maximum number of iterations for H1                           2000
+Convergence criterion for H1                             0.100D-03
+Optimization algorithm                                         EMA
+Integration Specifications
+  Type                                                    STANDARD
+  Number of integration points                                  15
+  Dimensions of numerical integration                            2
+  Adaptive quadrature                                           ON
+Link                                                         LOGIT
+Cholesky                                                        ON
+
+Input data file(s)
+  ../datasets/ParaNormal.dat
+Input data format  FREE
+
+
+SUMMARY OF DATA
+
+     Number of missing data patterns            15
+     Number of y missing data patterns           0
+     Number of u missing data patterns          15
+
+
+COVARIANCE COVERAGE OF DATA
+
+Minimum covariance coverage value   0.100
+
+
+     PROPORTION OF DATA PRESENT FOR U
+
+
+           Covariance Coverage
+              HEALHAND      LIFEPOSS      GRAPHOL       DOWSING       MINDREAD
+              ________      ________      ________      ________      ________
+ HEALHAND       0.998
+ LIFEPOSS       0.998         0.999
+ GRAPHOL        0.998         0.999         1.000
+ DOWSING        0.998         0.998         0.999         1.000
+ MINDREAD       0.997         0.998         0.998         0.998         0.998
+ WILLPOW        0.998         0.998         0.999         0.998         0.998
+ SEEFUT         0.998         0.998         0.999         0.998         0.998
+ SEEEVENT       0.998         0.998         0.999         0.999         0.998
+ SPIRITS        0.998         0.998         0.999         0.998         0.998
+ GNOMES         0.998         0.999         1.000         0.999         0.998
+ ALIENS         0.998         0.999         1.000         1.000         0.998
+ DEVILPOS       0.997         0.997         0.998         0.997         0.997
+ SORCERY        0.997         0.998         0.998         0.998         0.997
+ HAUNTED        0.998         0.998         0.999         0.998         0.998
+
+
+           Covariance Coverage
+              WILLPOW       SEEFUT        SEEEVENT      SPIRITS       GNOMES
+              ________      ________      ________      ________      ________
+ WILLPOW        0.999
+ SEEFUT         0.998         0.999
+ SEEEVENT       0.998         0.999         0.999
+ SPIRITS        0.998         0.998         0.998         0.999
+ GNOMES         0.999         0.999         0.999         0.999         1.000
+ ALIENS         0.999         0.999         0.999         0.999         1.000
+ DEVILPOS       0.997         0.997         0.997         0.997         0.998
+ SORCERY        0.998         0.998         0.998         0.998         0.998
+ HAUNTED        0.998         0.998         0.998         0.998         0.999
+
+
+           Covariance Coverage
+              ALIENS        DEVILPOS      SORCERY       HAUNTED
+              ________      ________      ________      ________
+ ALIENS         1.000
+ DEVILPOS       0.998         0.998
+ SORCERY        0.999         0.997         0.999
+ HAUNTED        0.999         0.997         0.998         0.999
+
+
+UNIVARIATE PROPORTIONS AND COUNTS FOR CATEGORICAL VARIABLES
+
+    HEALHAND
+      Category 1    0.391         1018.000
+      Category 2    0.217          564.000
+      Category 3    0.211          550.000
+      Category 4    0.115          299.000
+      Category 5    0.066          173.000
+    LIFEPOSS
+      Category 1    0.453         1179.000
+      Category 2    0.269          701.000
+      Category 3    0.185          482.000
+      Category 4    0.077          200.000
+      Category 5    0.017           43.000
+    GRAPHOL
+      Category 1    0.302          788.000
+      Category 2    0.261          680.000
+      Category 3    0.283          739.000
+      Category 4    0.127          331.000
+      Category 5    0.026           69.000
+    DOWSING
+      Category 1    0.364          949.000
+      Category 2    0.228          594.000
+      Category 3    0.222          578.000
+      Category 4    0.125          326.000
+      Category 5    0.061          160.000
+    MINDREAD
+      Category 1    0.469         1220.000
+      Category 2    0.269          701.000
+      Category 3    0.161          418.000
+      Category 4    0.076          197.000
+      Category 5    0.026           68.000
+    WILLPOW
+      Category 1    0.438         1141.000
+      Category 2    0.235          612.000
+      Category 3    0.193          502.000
+      Category 4    0.105          273.000
+      Category 5    0.030           77.000
+    SEEFUT
+      Category 1    0.419         1091.000
+      Category 2    0.217          564.000
+      Category 3    0.205          535.000
+      Category 4    0.112          291.000
+      Category 5    0.048          124.000
+    SEEEVENT
+      Category 1    0.441         1149.000
+      Category 2    0.231          601.000
+      Category 3    0.186          484.000
+      Category 4    0.101          264.000
+      Category 5    0.041          108.000
+    SPIRITS
+      Category 1    0.544         1418.000
+      Category 2    0.191          497.000
+      Category 3    0.133          347.000
+      Category 4    0.082          213.000
+      Category 5    0.050          130.000
+    GNOMES
+      Category 1    0.848         2210.000
+      Category 2    0.101          263.000
+      Category 3    0.032           83.000
+      Category 4    0.012           30.000
+      Category 5    0.008           21.000
+    ALIENS
+      Category 1    0.574         1498.000
+      Category 2    0.223          581.000
+      Category 3    0.139          363.000
+      Category 4    0.049          127.000
+      Category 5    0.015           39.000
+    DEVILPOS
+      Category 1    0.657         1710.000
+      Category 2    0.171          446.000
+      Category 3    0.091          238.000
+      Category 4    0.049          127.000
+      Category 5    0.031           81.000
+    SORCERY
+      Category 1    0.625         1627.000
+      Category 2    0.182          474.000
+      Category 3    0.105          273.000
+      Category 4    0.064          166.000
+      Category 5    0.025           65.000
+    HAUNTED
+      Category 1    0.578         1505.000
+      Category 2    0.224          583.000
+      Category 3    0.134          349.000
+      Category 4    0.049          127.000
+      Category 5    0.016           41.000
+
+
+
+UNIVARIATE SAMPLE STATISTICS
+
+
+     UNIVARIATE HIGHER-ORDER MOMENT DESCRIPTIVE STATISTICS
+
+         Variable/         Mean/     Skewness/   Minimum/ % with                Percentiles
+        Sample Size      Variance    Kurtosis    Maximum  Min/Max      20%/60%    40%/80%    Median
+
+     AGE                   0.000      -0.486      -2.324    0.31%      -0.922     -0.130      0.175
+            2608.000       0.999      -0.594       2.369    0.04%       0.419      0.906
+     MALE                  0.572      -0.293       0.000   42.75%       0.000      0.000      1.000
+            2608.000       0.245      -1.914       1.000   57.25%       1.000      1.000
+
+
+THE MODEL ESTIMATION TERMINATED NORMALLY
+
+
+
+MODEL FIT INFORMATION
+
+Number of Free Parameters                      129
+
+Loglikelihood
+
+          H0 Value                      -36514.498
+          H0 Scaling Correction Factor      1.0202
+            for MLR
+
+Information Criteria
+
+          Akaike (AIC)                   73286.997
+          Bayesian (BIC)                 74043.754
+          Sample-Size Adjusted BIC       73633.884
+            (n* = (n + 2) / 24)
+
+
+
+MODEL RESULTS
+
+                                                    Two-Tailed
+                    Estimate       S.E.  Est./S.E.    P-Value
+
+ EHB      BY
+    HEALHAND           2.189      0.106     20.598      0.000
+    LIFEPOSS         999.000      0.000    999.000    999.000
+    GRAPHOL          999.000      0.000    999.000    999.000
+    DOWSING          999.000      0.000    999.000    999.000
+    MINDREAD         999.000      0.000    999.000    999.000
+    WILLPOW          999.000      0.000    999.000    999.000
+    SEEFUT           999.000      0.000    999.000    999.000
+    SEEEVENT         999.000      0.000    999.000    999.000
+
+ UB       BY
+    SPIRITS            3.098      0.165     18.745      0.000
+    GNOMES           999.000      0.000    999.000    999.000
+    ALIENS           999.000      0.000    999.000    999.000
+    DEVILPOS         999.000      0.000    999.000    999.000
+    SORCERY          999.000      0.000    999.000    999.000
+    HAUNTED          999.000      0.000    999.000    999.000
+
+ EHB        ON
+    AGE                0.228      0.028      8.080      0.000
+    MALE              -0.371      0.060     -6.171      0.000
+
+ UB         ON
+    AGE               -0.192      0.028     -6.791      0.000
+    MALE              -0.571      0.075     -7.659      0.000
+
+ LIFEPOSS   ON
+    AGE               -0.533      0.057     -9.281      0.000
+    MALE               0.052      0.107      0.488      0.625
+
+ GRAPHOL    ON
+    AGE                0.040      0.055      0.725      0.468
+    MALE              -0.119      0.094     -1.269      0.205
+
+ DOWSING    ON
+    AGE                0.169      0.054      3.125      0.002
+    MALE               0.006      0.104      0.055      0.956
+
+ MINDREAD   ON
+    AGE               -0.177      0.073     -2.439      0.015
+    MALE              -0.043      0.139     -0.306      0.759
+
+ WILLPOW    ON
+    AGE               -0.573      0.060     -9.548      0.000
+    MALE              -0.067      0.111     -0.608      0.543
+
+ SEEFUT     ON
+    AGE               -0.640      0.088     -7.253      0.000
+    MALE              -0.395      0.161     -2.458      0.014
+
+ SEEEVENT   ON
+    AGE               -0.786      0.087     -8.983      0.000
+    MALE              -0.422      0.157     -2.695      0.007
+
+ GNOMES     ON
+    AGE                0.209      0.104      2.006      0.045
+    MALE               0.347      0.204      1.700      0.089
+
+ ALIENS     ON
+    AGE               -0.168      0.049     -3.429      0.001
+    MALE               0.744      0.104      7.177      0.000
+
+ DEVILPOS   ON
+    AGE                0.632      0.066      9.561      0.000
+    MALE               0.800      0.121      6.608      0.000
+
+ SORCERY    ON
+    AGE                0.718      0.075      9.532      0.000
+    MALE               0.232      0.133      1.745      0.081
+
+ HAUNTED    ON
+    AGE                0.191      0.058      3.318      0.001
+    MALE               0.153      0.120      1.275      0.202
+
+ EHB      WITH
+    UB               999.000      0.000    999.000    999.000
+
+ Intercepts
+    EHB                0.000      0.000    999.000    999.000
+    UB                 0.000      0.000    999.000    999.000
+
+ Thresholds
+    HEALHAND$1        -1.205      0.100    -12.005      0.000
+    HEALHAND$2         0.355      0.096      3.694      0.000
+    HEALHAND$3         2.123      0.108     19.588      0.000
+    HEALHAND$4         3.781      0.139     27.123      0.000
+    LIFEPOSS$1        -0.586      0.090     -6.552      0.000
+    LIFEPOSS$2         1.106      0.092     11.973      0.000
+    LIFEPOSS$3         2.896      0.114     25.376      0.000
+    LIFEPOSS$4         5.106      0.183     27.908      0.000
+    GRAPHOL$1         -1.524      0.084    -18.217      0.000
+    GRAPHOL$2          0.018      0.079      0.227      0.821
+    GRAPHOL$3          1.960      0.090     21.720      0.000
+    GRAPHOL$4          4.183      0.150     27.852      0.000
+    DOWSING$1         -1.350      0.094    -14.365      0.000
+    DOWSING$2          0.244      0.090      2.721      0.007
+    DOWSING$3          1.997      0.100     19.968      0.000
+    DOWSING$4          3.761      0.132     28.600      0.000
+    MINDREAD$1        -0.828      0.114     -7.262      0.000
+    MINDREAD$2         1.446      0.119     12.186      0.000
+    MINDREAD$3         3.478      0.147     23.596      0.000
+    MINDREAD$4         5.666      0.211     26.806      0.000
+    WILLPOW$1         -0.843      0.089     -9.520      0.000
+    WILLPOW$2          0.713      0.086      8.321      0.000
+    WILLPOW$3          2.386      0.101     23.639      0.000
+    WILLPOW$4          4.438      0.156     28.406      0.000
+    SEEFUT$1          -1.702      0.140    -12.187      0.000
+    SEEFUT$2           0.435      0.133      3.278      0.001
+    SEEFUT$3           2.914      0.161     18.114      0.000
+    SEEFUT$4           5.433      0.224     24.250      0.000
+    SEEEVENT$1        -1.437      0.134    -10.754      0.000
+    SEEEVENT$2         0.821      0.131      6.270      0.000
+    SEEEVENT$3         3.094      0.163     19.015      0.000
+    SEEEVENT$4         5.516      0.229     24.121      0.000
+    SPIRITS$1         -0.489      0.128     -3.835      0.000
+    SPIRITS$2          1.485      0.137     10.837      0.000
+    SPIRITS$3          3.316      0.169     19.574      0.000
+    SPIRITS$4          5.223      0.219     23.841      0.000
+    GNOMES$1           2.494      0.172     14.509      0.000
+    GNOMES$2           4.236      0.208     20.368      0.000
+    GNOMES$3           5.605      0.251     22.292      0.000
+    GNOMES$4           6.770      0.331     20.438      0.000
+    ALIENS$1           0.403      0.084      4.811      0.000
+    ALIENS$2           1.836      0.092     19.980      0.000
+    ALIENS$3           3.449      0.118     29.202      0.000
+    ALIENS$4           5.120      0.185     27.665      0.000
+    DEVILPOS$1         1.014      0.107      9.523      0.000
+    DEVILPOS$2         2.428      0.127     19.135      0.000
+    DEVILPOS$3         3.584      0.148     24.212      0.000
+    DEVILPOS$4         4.785      0.185     25.833      0.000
+    SORCERY$1          0.474      0.115      4.139      0.000
+    SORCERY$2          2.205      0.136     16.208      0.000
+    SORCERY$3          3.639      0.168     21.700      0.000
+    SORCERY$4          5.464      0.228     23.922      0.000
+    HAUNTED$1          0.023      0.103      0.224      0.823
+    HAUNTED$2          1.870      0.115     16.314      0.000
+    HAUNTED$3          3.757      0.148     25.458      0.000
+    HAUNTED$4          5.665      0.215     26.389      0.000
+
+ Residual Variances
+    EHB              999.000      0.000    999.000    999.000
+    UB               999.000      0.000    999.000    999.000
+
+New/Additional Parameters
+    L2_1_0             1.849      0.100     18.542      0.000
+    L2_1_A            -0.009      0.067     -0.126      0.900
+    L2_1_M            -0.137      0.132     -1.032      0.302
+    L3_1_0             1.520      0.080     18.910      0.000
+    L3_1_A            -0.018      0.063     -0.289      0.773
+    L3_1_M            -0.100      0.114     -0.883      0.377
+    L4_1_0             1.963      0.095     20.674      0.000
+    L4_1_A            -0.090      0.065     -1.371      0.170
+    L4_1_M             0.135      0.126      1.069      0.285
+    L5_1_0             2.636      0.130     20.243      0.000
+    L5_1_A             0.011      0.091      0.116      0.908
+    L5_1_M             0.191      0.180      1.060      0.289
+    L6_1_0             1.757      0.093     18.932      0.000
+    L6_1_A            -0.060      0.073     -0.818      0.413
+    L6_1_M             0.311      0.141      2.203      0.028
+    L7_1_0             3.372      0.157     21.506      0.000
+    L7_1_A            -0.173      0.104     -1.659      0.097
+    L7_1_M             0.141      0.204      0.690      0.490
+    L8_1_0             3.267      0.155     21.122      0.000
+    L8_1_A            -0.112      0.102     -1.105      0.269
+    L8_1_M             0.114      0.200      0.569      0.569
+    L10_2_0            2.453      0.172     14.296      0.000
+    L10_2_A            0.241      0.119      2.036      0.042
+    L10_2_M           -0.373      0.238     -1.568      0.117
+    L11_2_0            1.447      0.101     14.293      0.000
+    L11_2_A            0.311      0.062      5.008      0.000
+    L11_2_M           -0.075      0.138     -0.543      0.587
+    L12_2_0            1.804      0.118     15.353      0.000
+    L12_2_A           -0.134      0.077     -1.739      0.082
+    L12_2_M            0.107      0.147      0.726      0.468
+    L13_2_0            2.370      0.141     16.799      0.000
+    L13_2_A           -0.183      0.096     -1.917      0.055
+    L13_2_M            0.210      0.178      1.181      0.238
+    L14_2_0            2.211      0.124     17.872      0.000
+    L14_2_A           -0.046      0.085     -0.537      0.591
+    L14_2_M           -0.113      0.167     -0.676      0.499
+    Z12_0              1.420      0.063     22.444      0.000
+    Z12_A              0.015      0.045      0.326      0.744
+    Z12_M              0.129      0.092      1.398      0.162
+    D1_A               0.097      0.061      1.592      0.111
+    D1_M              -0.080      0.111     -0.722      0.471
+    D2_A               0.013      0.070      0.181      0.856
+    D2_M               0.169      0.128      1.320      0.187
+
+
+LOGISTIC REGRESSION ODDS RATIO RESULTS
+
+ LIFEPOSS   ON
+    AGE                0.587
+    MALE               1.054
+
+ GRAPHOL    ON
+    AGE                1.040
+    MALE               0.887
+
+ DOWSING    ON
+    AGE                1.184
+    MALE               1.006
+
+ MINDREAD   ON
+    AGE                0.838
+    MALE               0.958
+
+ WILLPOW    ON
+    AGE                0.564
+    MALE               0.935
+
+ SEEFUT     ON
+    AGE                0.527
+    MALE               0.674
+
+ SEEEVENT   ON
+    AGE                0.456
+    MALE               0.655
+
+ GNOMES     ON
+    AGE                1.232
+    MALE               1.415
+
+ ALIENS     ON
+    AGE                0.845
+    MALE               2.104
+
+ DEVILPOS   ON
+    AGE                1.882
+    MALE               2.226
+
+ SORCERY    ON
+    AGE                2.051
+    MALE               1.261
+
+ HAUNTED    ON
+    AGE                1.211
+    MALE               1.166
+
+
+BRANT WALD TEST FOR PROPORTIONAL ODDS
+
+                                   Degrees of
+                      Chi-Square     Freedom   P-Value
+
+  HEALHAND
+    Overall test          13.413         6      0.037
+    AGE                   12.243         3      0.007
+    MALE                   1.460         3      0.692
+
+  LIFEPOSS
+    Overall test           4.037         6      0.672
+    AGE                    0.576         3      0.902
+    MALE                   3.388         3      0.336
+
+  GRAPHOL
+    Overall test           8.204         6      0.224
+    AGE                    6.298         3      0.098
+    MALE                   1.712         3      0.634
+
+  DOWSING
+    Overall test           5.027         6      0.540
+    AGE                    3.105         3      0.376
+    MALE                   2.141         3      0.544
+
+  MINDREAD
+    Overall test           3.462         6      0.749
+    AGE                    1.674         3      0.643
+    MALE                   2.008         3      0.571
+
+  WILLPOW
+    Overall test          14.107         6      0.028
+    AGE                    7.426         3      0.059
+    MALE                   7.153         3      0.067
+
+  SEEFUT
+    Overall test           2.986         6      0.811
+    AGE                    1.407         3      0.704
+    MALE                   1.386         3      0.709
+
+  SEEEVENT
+    Overall test           1.895         6      0.929
+    AGE                    0.328         3      0.955
+    MALE                   1.501         3      0.682
+
+  SPIRITS
+    Overall test           3.315         6      0.768
+    AGE                    1.771         3      0.621
+    MALE                   1.627         3      0.653
+
+  GNOMES
+    Overall test           7.233         6      0.300
+    AGE                    4.814         3      0.186
+    MALE                   2.809         3      0.422
+
+  ALIENS
+    Overall test          11.195         6      0.083
+    AGE                    4.043         3      0.257
+    MALE                   7.016         3      0.071
+
+  DEVILPOS
+    Overall test           2.568         6      0.861
+    AGE                    0.807         3      0.848
+    MALE                   1.874         3      0.599
+
+  SORCERY
+    Overall test           3.550         6      0.737
+    AGE                    3.205         3      0.361
+    MALE                   0.435         3      0.933
+
+  HAUNTED
+    Overall test           2.795         6      0.834
+    AGE                    2.129         3      0.546
+    MALE                   0.648         3      0.885
+
+
+QUALITY OF NUMERICAL RESULTS
+
+     Condition Number for the Information Matrix              0.154E-04
+       (ratio of smallest to largest eigenvalue)
+
+
+     Beginning Time:  02:00:06
+        Ending Time:  02:28:01
+       Elapsed Time:  00:27:55
+
+
+
+MUTHEN & MUTHEN
+3463 Stoner Ave.
+Los Angeles, CA  90066
+
+Tel: (310) 391-9971
+Fax: (310) 391-8971
+Web: www.StatModel.com
+Support: Support@StatModel.com
+
+Copyright (c) 1998-2017 Muthen & Muthen

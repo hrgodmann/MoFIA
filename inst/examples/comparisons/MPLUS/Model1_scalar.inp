@@ -1,0 +1,46 @@
+TITLE:    ParaNormal scalar (Model1_scalar in ../MoFIA/MoFIA_Comp.R)
+DATA:     FILE = "../datasets/ParaNormal.dat";
+VARIABLE: NAMES = HealHand LifePoss Graphol Dowsing MindRead Willpow SeeFut
+          SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age Male;
+          USEVARIABLES = HealHand LifePoss Graphol Dowsing MindRead Willpow
+          SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted Age
+          Male;
+          CATEGORICAL = HealHand LifePoss Graphol Dowsing MindRead Willpow
+          SeeFut SeeEvent Spirits Gnomes Aliens DevilPos Sorcery Haunted;
+          MISSING = ALL (-99);
+          CONSTRAINT = Age Male;
+ANALYSIS: TYPE = GENERAL;
+          ESTIMATOR = MLR;
+          INFORMATION = OBSERVED;
+          LINK = LOGIT;
+          ALGORITHM = INTEGRATION;
+          LOGCRITERION = 0.00001;
+MODEL:
+  [EHB@0];
+  [UB@0];
+  EHB* (fv1);
+  UB* (fv2);
+  EHB BY HealHand*;
+  EHB BY LifePoss*;
+  EHB BY Graphol*;
+  EHB BY Dowsing*;
+  EHB BY MindRead*;
+  EHB BY Willpow*;
+  EHB BY SeeFut*;
+  EHB BY SeeEvent*;
+  UB BY Spirits*;
+  UB BY Gnomes*;
+  UB BY Aliens*;
+  UB BY DevilPos*;
+  UB BY Sorcery*;
+  UB BY Haunted*;
+  EHB ON Age Male;
+  UB ON Age Male;
+  EHB WITH UB* (cv12);
+MODEL CONSTRAINT:
+  NEW(z12_0*0.3 z12_a*0 z12_m*0 d1_a*0 d1_m*0 d2_a*0 d2_m*0);
+  cv12 = (EXP(2*(z12_0 + z12_a*Age + z12_m*Male)) - 1) / (EXP(2*(z12_0 +
+      z12_a*Age + z12_m*Male)) + 1) * EXP((d1_a*Age + d1_m*Male + d2_a*Age +
+      d2_m*Male)/2);
+  fv1 = EXP(d1_a*Age + d1_m*Male);
+  fv2 = EXP(d2_a*Age + d2_m*Male);

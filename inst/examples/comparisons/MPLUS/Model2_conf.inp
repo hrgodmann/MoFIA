@@ -1,0 +1,55 @@
+TITLE:    HS39 configural (Model2_conf in ../MoFIA/MoFIA_Comp.R)
+DATA:     FILE = "../datasets/HS39.dat";
+VARIABLE: NAMES = x1 x2 x3 x4 x5 x6 x7 x8 x9 school;
+          USEVARIABLES = x1 x2 x3 x9 x7 x8 school;
+          CONSTRAINT = school;
+ANALYSIS: TYPE = GENERAL;
+          ESTIMATOR = MLR;
+          INFORMATION = OBSERVED;
+          ITERATIONS = 10000;
+          CONVERGENCE = 1.0E-8;
+MODEL:
+  [Visual@0];
+  [Speed@0];
+  Visual* (fv1);
+  Speed* (fv2);
+  Visual BY x1*;
+  Visual BY x2* (ld2_1);
+  Visual BY x3* (ld3_1);
+  Visual BY x9* (ld4_1);
+  Speed BY x7*;
+  Speed BY x8* (ld6_2);
+  Speed BY x9* (ld4_2);
+  Visual ON school;
+  Speed ON school;
+  Visual WITH Speed* (cv12);
+  x2 ON school;
+  x3 ON school;
+  x9 ON school;
+  x8 ON school;
+  x1* (rv1);
+  x2* (rv2);
+  x3* (rv3);
+  x9* (rv4);
+  x7* (rv5);
+  x8* (rv6);
+MODEL CONSTRAINT:
+  NEW(l2_1_0*1 l2_1_s*0 l3_1_0*1 l3_1_s*0 l4_1_0*1 l4_1_s*0 l6_2_0*1 l6_2_s*0
+      l4_2_0*1 l4_2_s*0 z12_0*0.3 z12_s*0 w1_0*-0.5 w1_s*0 w2_0*-0.5 w2_s*0
+      w3_0*-0.5 w3_s*0 w4_0*-0.5 w4_s*0 w5_0*-0.5 w5_s*0 w6_0*-0.5 w6_s*0
+      d1_s*0 d2_s*0);
+  ld2_1 = l2_1_0 + l2_1_s*school;
+  ld3_1 = l3_1_0 + l3_1_s*school;
+  ld4_1 = l4_1_0 + l4_1_s*school;
+  ld6_2 = l6_2_0 + l6_2_s*school;
+  ld4_2 = l4_2_0 + l4_2_s*school;
+  cv12 = (EXP(2*(z12_0 + z12_s*school)) - 1) / (EXP(2*(z12_0 + z12_s*school))
+      + 1) * EXP((d1_s*school + d2_s*school)/2);
+  rv1 = EXP(w1_0 + w1_s*school);
+  rv2 = EXP(w2_0 + w2_s*school);
+  rv3 = EXP(w3_0 + w3_s*school);
+  rv4 = EXP(w4_0 + w4_s*school);
+  rv5 = EXP(w5_0 + w5_s*school);
+  rv6 = EXP(w6_0 + w6_s*school);
+  fv1 = EXP(d1_s*school);
+  fv2 = EXP(d2_s*school);
